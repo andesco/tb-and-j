@@ -7,7 +7,7 @@ Local Jellyfin plugin prototype for replacing TorBox Media Center STRM generatio
 Add this repository URL in Jellyfin:
 
 ```text
-https://raw.githubusercontent.com/andesco/jellyfin-plugin-tbj/main/manifest.json
+https://raw.githubusercontent.com/andesco/tb-and-j/main/manifest.json
 ```
 
 ## Behavior
