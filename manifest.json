@@ -1,0 +1,20 @@
+[
+  {
+    "category": "General",
+    "guid": "a2f4e2bb-7dcb-49ea-8bbf-f8b9d77f1fb5",
+    "name": "TB&J",
+    "description": "Synchronizes TorBox media into a Jellyfin-managed STRM library and deletes TorBox downloads only after all managed media files for that download are tombstoned.",
+    "overview": "TorBox STRM sync with Jellyfin-driven tombstones.",
+    "owner": "Local",
+    "versions": [
+      {
+        "version": "0.1.0.0",
+        "changelog": "Initial TB&J TorBox STRM sync and managed tombstone deletion prototype.",
+        "targetAbi": "10.11.10.0",
+        "sourceUrl": "https://raw.githubusercontent.com/andesco/jellyfin-plugin-tbj/main/dist/tbj_0.1.0.0.zip",
+        "checksum": "409627c6c22abbec2d8607efd57a850b",
+        "timestamp": "2026-06-06T00:00:00Z"
+      }
+    ]
+  }
+]
