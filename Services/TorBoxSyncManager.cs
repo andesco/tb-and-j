@@ -209,9 +209,29 @@ public sealed class TorBoxSyncManager
 
     private static string BuildJellyfinPlayUrl(string jellyfinBase, ManagedFileRecord record)
     {
-        var name = Uri.EscapeDataString(
-            string.IsNullOrWhiteSpace(record.TorBoxItemName) ? "media" : record.TorBoxItemName);
+        // When TorBox stored only an infohash as the item name (magnet links added without
+        // a resolved title), fall back to the individual filename which is always descriptive.
+        var itemName = record.TorBoxItemName ?? string.Empty;
+        var displayName = IsHexHash(itemName)
+            ? (record.TorBoxFileName ?? record.TorBoxItemName ?? "media")
+            : itemName;
+
+        if (string.IsNullOrWhiteSpace(displayName))
+            displayName = "media";
+
+        var name = Uri.EscapeDataString(displayName);
         return $"{jellyfinBase}/torboxsync/play/{record.TorBoxType}/{record.TorBoxItemId}/{record.TorBoxFileId}/{name}";
+    }
+
+    private static bool IsHexHash(string value)
+    {
+        if (value.Length < 24) return false;
+        foreach (var c in value)
+        {
+            if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')))
+                return false;
+        }
+        return true;
     }
 
     private void CleanupUnmanagedStrmFiles(TorBoxSyncState state, PluginConfiguration configuration)
