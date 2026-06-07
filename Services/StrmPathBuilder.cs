@@ -121,10 +121,11 @@ public static partial class StrmPathBuilder
         ["trailers"] = "trailers",      ["trailer"] = "trailers",
         ["interviews"] = "interviews",  ["interview"] = "interviews",
         ["shorts"] = "shorts",          ["short"] = "shorts",
-        // specials / season 0 → Season 00 subfolder (Jellyfin S00Exx)
+        // specials / season 0 / pilots → Season 00 subfolder (Jellyfin S00Exx)
         ["specials"] = "Season 00",     ["special"] = "Season 00",
         ["season 0"] = "Season 00",     ["season 00"] = "Season 00",
         ["s00"] = "Season 00",
+        ["pilot"] = "Season 00",        ["pilots"] = "Season 00",
     };
 
     private static ParsedMedia? TryParseExtras(TorBoxFileCandidate candidate, int? fallbackYear = null)
