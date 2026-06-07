@@ -8,16 +8,29 @@ public static partial class StrmPathBuilder
     public static ManagedFileRecord ToManagedRecord(TorBoxFileCandidate candidate, string libraryRootPath, DateTimeOffset now)
     {
         var parsed = ParseCandidate(candidate);
-        var relativePath = parsed.MediaKind == "episode"
-            ? Path.Combine(
+
+        var relativePath = parsed.MediaKind switch
+        {
+            "episode" => Path.Combine(
                 "series",
                 SanitizePathSegment(parsed.DisplayName),
-                $"Season {parsed.SeasonNumber}",
-                $"{SanitizePathSegment(parsed.FileBaseName)}.strm")
-            : Path.Combine(
+                $"Season {parsed.SeasonNumber:00}",
+                $"{SanitizePathSegment(parsed.FileBaseName)}.strm"),
+            "showextra" => Path.Combine(
+                "series",
+                SanitizePathSegment(parsed.DisplayName),
+                parsed.ExtrasFolder!,
+                $"{SanitizePathSegment(parsed.FileBaseName)}.strm"),
+            "movieextra" => Path.Combine(
                 "movies",
                 SanitizePathSegment(parsed.DisplayName),
-                $"{SanitizePathSegment(parsed.FileBaseName)}.strm");
+                parsed.ExtrasFolder!,
+                $"{SanitizePathSegment(parsed.FileBaseName)}.strm"),
+            _ => Path.Combine(
+                "movies",
+                SanitizePathSegment(parsed.DisplayName),
+                $"{SanitizePathSegment(parsed.FileBaseName)}.strm"),
+        };
 
         return new ManagedFileRecord
         {
@@ -28,7 +41,7 @@ public static partial class StrmPathBuilder
             TorBoxFileName = candidate.FileName,
             TorBoxPath = candidate.Path,
             MediaKind = parsed.MediaKind,
-            ShowName = parsed.MediaKind == "episode" ? parsed.DisplayName : string.Empty,
+            ShowName = parsed.MediaKind is "episode" or "showextra" ? parsed.DisplayName : string.Empty,
             SeasonNumber = parsed.SeasonNumber,
             EpisodeNumber = parsed.EpisodeNumber,
             RelativeStrmPath = relativePath,
@@ -53,16 +66,133 @@ public static partial class StrmPathBuilder
     {
         var episodeMatch = EpisodePattern().Match(candidate.FileName);
         if (!episodeMatch.Success)
-        {
             episodeMatch = EpisodePattern().Match(candidate.Path);
-        }
 
         if (episodeMatch.Success)
-        {
             return ParseEpisode(candidate, episodeMatch);
-        }
+
+        var extras = TryParseExtras(candidate);
+        if (extras is not null)
+            return extras;
 
         return ParseMovie(candidate);
+    }
+
+    // ── Extras / specials detection ──────────────────────────────────────────
+
+    private static readonly HashSet<string> _extrasFolderNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "extras", "extra", "bonus", "bonus features", "bonusfeatures", "bonus content",
+        "featurettes", "featurette",
+        "behind the scenes", "behindthescenes", "behind-the-scenes",
+        "deleted scenes", "deletedscenes", "deleted",
+        "trailers", "trailer",
+        "interviews", "interview",
+        "shorts", "short",
+        "clips", "clip", "scenes",
+        "specials", "special", "season 0", "season 00", "s00",
+    };
+
+    private static readonly Dictionary<string, string> _extrasFolderMap = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["extras"] = "extras",          ["extra"] = "extras",
+        ["bonus"] = "extras",           ["bonus features"] = "extras",
+        ["bonusfeatures"] = "extras",   ["bonus content"] = "extras",
+        ["clips"] = "extras",           ["clip"] = "extras",
+        ["scenes"] = "extras",
+        ["featurettes"] = "featurettes", ["featurette"] = "featurettes",
+        ["behind the scenes"] = "behind the scenes",
+        ["behindthescenes"] = "behind the scenes",
+        ["behind-the-scenes"] = "behind the scenes",
+        ["deleted scenes"] = "deleted scenes",
+        ["deletedscenes"] = "deleted scenes",
+        ["deleted"] = "deleted scenes",
+        ["trailers"] = "trailers",      ["trailer"] = "trailers",
+        ["interviews"] = "interviews",  ["interview"] = "interviews",
+        ["shorts"] = "shorts",          ["short"] = "shorts",
+        // specials / season 0 → Season 00 subfolder (Jellyfin S00Exx)
+        ["specials"] = "Season 00",     ["special"] = "Season 00",
+        ["season 0"] = "Season 00",     ["season 00"] = "Season 00",
+        ["s00"] = "Season 00",
+    };
+
+    private static ParsedMedia? TryParseExtras(TorBoxFileCandidate candidate)
+    {
+        if (string.IsNullOrWhiteSpace(candidate.Path))
+            return null;
+
+        var parts = candidate.Path.Split(new[] { '/', '\\' }, StringSplitOptions.RemoveEmptyEntries);
+        // Need at least root / extras-folder / file.ext
+        if (parts.Length < 3)
+            return null;
+
+        var rootFolder = parts[0];
+        var fileName   = parts[^1];
+
+        // Walk intermediate directories looking for a recognised extras folder.
+        // Also track whether any intermediate looks like a season folder (handles
+        // paths like ShowName/Season 02/Extras/file.mp4 where the root has no
+        // season marker of its own).
+        string? jellyfinFolder = null;
+        var hasSeasonIntermediate = false;
+
+        for (var i = 1; i < parts.Length - 1; i++)
+        {
+            var part = parts[i].Trim();
+            if (_extrasFolderMap.TryGetValue(part, out var mapped))
+            {
+                jellyfinFolder = mapped;
+                break;
+            }
+            // e.g. "Season 02", "S02"
+            if (TvSeasonKeywordPattern().IsMatch(part) || TvSeasonNumberPattern().IsMatch(part))
+                hasSeasonIntermediate = true;
+        }
+
+        if (jellyfinFolder is null)
+            return null;
+
+        var fileBaseName = Path.GetFileNameWithoutExtension(fileName);
+        var isTvShow     = hasSeasonIntermediate || LooksLikeTvShowFolder(rootFolder);
+        var parentTitle  = ExtractTitleFromFolder(rootFolder);
+
+        return new ParsedMedia(
+            isTvShow ? "showextra" : "movieextra",
+            parentTitle,
+            fileBaseName,
+            null,
+            null,
+            jellyfinFolder);
+    }
+
+    private static bool LooksLikeTvShowFolder(string name)
+    {
+        // Season range:  S01-03, S01-03C, S01-S03
+        if (TvSeasonRangePattern().IsMatch(name))   return true;
+        // Standalone season:  S01, S02 (not part of SxxExx or a range)
+        if (TvSeasonNumberPattern().IsMatch(name))  return true;
+        // "Season N" / "Seasons N-M"
+        if (TvSeasonKeywordPattern().IsMatch(name)) return true;
+        // "Complete Series" / "Complete Collection"
+        if (TvCompleteSeriesPattern().IsMatch(name)) return true;
+        // Full SxxExx episode tag somewhere in the folder name
+        if (EpisodePattern().IsMatch(name))         return true;
+        return false;
+    }
+
+    private static string ExtractTitleFromFolder(string folderName)
+    {
+        // Strip from the season/quality marker onward, then run through the
+        // normal title + year extractor so we get "(YYYY)" when a year is present.
+        var stripped = SeasonAndBeyondPattern().Replace(folderName, string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(stripped))
+            stripped = folderName;
+
+        var (title, year) = ParseTitleAndYear(stripped);
+        if (string.IsNullOrWhiteSpace(title))
+            title = CleanTitleText(stripped);
+
+        return string.IsNullOrWhiteSpace(title) ? "Unknown" : FormatTitle(title, year);
     }
 
     private static ParsedMedia ParseEpisode(TorBoxFileCandidate candidate, Match episodeMatch)
@@ -309,7 +439,8 @@ public static partial class StrmPathBuilder
         string DisplayName,
         string FileBaseName,
         int? SeasonNumber,
-        int? EpisodeNumber);
+        int? EpisodeNumber,
+        string? ExtrasFolder = null);
 
     [GeneratedRegex(@"(?i)(?<prefix>.*?)(?:(?:[SsTt](?<season>\d{1,4})[ ._\-\[\(]*(?:[Ee][Pp]?)[ ._-]*(?<episode>\d{1,4})(?<extra>(?:[ ._-]*(?:[Ee][Pp]?|x|-)[ ._-]*\d{1,4})*))|(?:(?<season>\d{1,4})[ ._-]*x[ ._-]*(?<episode>\d{1,4})(?<extra>(?:[ ._-]*(?:x|-)[ ._-]*\d{1,4})*))|(?:Season[ ._-]*(?<season>\d{1,4})[ ._-]*Episode[ ._-]*(?<episode>\d{1,4})(?<extra>(?:[ ._-]*(?:Episode|-)[ ._-]*\d{1,4})*)))(?<tail>.*)$", RegexOptions.Compiled)]
     private static partial Regex EpisodePattern();
@@ -364,4 +495,26 @@ public static partial class StrmPathBuilder
 
     [GeneratedRegex(@"[\(\[]\s*$", RegexOptions.Compiled)]
     private static partial Regex TrailingUnclosedBracketPattern();
+
+    // TV-show folder detection
+    [GeneratedRegex(@"\bS\d{1,2}[-–]S?\d{1,2}C?\b", RegexOptions.IgnoreCase | RegexOptions.Compiled)]
+    private static partial Regex TvSeasonRangePattern();
+
+    [GeneratedRegex(@"\bS\d{2}(?![-–E\d])\b", RegexOptions.IgnoreCase | RegexOptions.Compiled)]
+    private static partial Regex TvSeasonNumberPattern();
+
+    [GeneratedRegex(@"\bSeasons?\s+\d", RegexOptions.IgnoreCase | RegexOptions.Compiled)]
+    private static partial Regex TvSeasonKeywordPattern();
+
+    [GeneratedRegex(@"\b(?:Complete\s+Series|Complete\s+Collection|The\s+Complete\s+Series)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled)]
+    private static partial Regex TvCompleteSeriesPattern();
+
+    // Strip season marker and everything after it so only the show/movie title remains.
+    // Handles: "Bluey S01-03C …", "Breaking Bad S01-S05 …", "Walking Dead Season 10 …",
+    //          "GOT Complete Series", "Show.Name.S01.BluRay"
+    [GeneratedRegex(
+        @"\s*\bS(?:easons?\s*)?\d{1,2}(?:[-–]S?\d{1,2}C?)?\b.*$" +
+        @"|\s*\bComplete\b.*$",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled)]
+    private static partial Regex SeasonAndBeyondPattern();
 }
