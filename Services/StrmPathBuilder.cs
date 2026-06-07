@@ -91,19 +91,10 @@ public static partial class StrmPathBuilder
 
     // ── Extras / specials detection ──────────────────────────────────────────
 
-    private static readonly HashSet<string> _extrasFolderNames = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "extras", "extra", "bonus", "bonus features", "bonusfeatures", "bonus content",
-        "featurettes", "featurette",
-        "behind the scenes", "behindthescenes", "behind-the-scenes",
-        "deleted scenes", "deletedscenes", "deleted",
-        "trailers", "trailer",
-        "interviews", "interview",
-        "shorts", "short",
-        "clips", "clip", "scenes",
-        "specials", "special", "season 0", "season 00", "s00",
-    };
-
+    // Named extras folders with a specific Jellyfin target name.
+    // For TV show torrents, ANY unrecognised non-season intermediate folder also
+    // falls back to "extras" — so "Bonus Bits", "Making Of", etc. are covered
+    // automatically without needing to be listed here.
     private static readonly Dictionary<string, string> _extrasFolderMap = new(StringComparer.OrdinalIgnoreCase)
     {
         ["extras"] = "extras",          ["extra"] = "extras",
@@ -134,42 +125,54 @@ public static partial class StrmPathBuilder
             return null;
 
         var parts = candidate.Path.Split(new[] { '/', '\\' }, StringSplitOptions.RemoveEmptyEntries);
-        // Need at least root / extras-folder / file.ext
+        // Need at least root / some-folder / file.ext
         if (parts.Length < 3)
             return null;
 
         var rootFolder = parts[0];
         var fileName   = parts[^1];
+        var isTvShow   = LooksLikeTvShowFolder(rootFolder);
 
-        // Walk intermediate directories looking for a recognised extras folder.
-        // Also track whether any intermediate looks like a season folder (handles
-        // paths like ShowName/Season 02/Extras/file.mp4 where the root has no
-        // season marker of its own).
         string? jellyfinFolder = null;
         var hasSeasonIntermediate = false;
 
         for (var i = 1; i < parts.Length - 1; i++)
         {
             var part = parts[i].Trim();
+
+            // Named extras/specials folder — works for movies and TV shows alike.
             if (_extrasFolderMap.TryGetValue(part, out var mapped))
             {
                 jellyfinFolder = mapped;
                 break;
             }
-            // e.g. "Season 02", "S02"
+
+            // Season folder (e.g. "Season 02", "S02") — not extras, keep scanning.
             if (TvSeasonKeywordPattern().IsMatch(part) || TvSeasonNumberPattern().IsMatch(part))
+            {
                 hasSeasonIntermediate = true;
+                continue;
+            }
+
+            // For TV show torrents, ANY intermediate folder that isn't a season folder
+            // is treated as generic extras. This handles arbitrary folder names like
+            // "Bonus Bits", "Making Of", "Outtakes", etc. without enumerating them.
+            if (isTvShow || hasSeasonIntermediate)
+            {
+                jellyfinFolder = "extras";
+                break;
+            }
         }
 
         if (jellyfinFolder is null)
             return null;
 
-        var fileBaseName = Path.GetFileNameWithoutExtension(fileName);
-        var isTvShow     = hasSeasonIntermediate || LooksLikeTvShowFolder(rootFolder);
-        var parentTitle  = ExtractTitleFromFolder(rootFolder, fallbackYear);
+        var fileBaseName    = Path.GetFileNameWithoutExtension(fileName);
+        var effectiveIsTv   = isTvShow || hasSeasonIntermediate;
+        var parentTitle     = ExtractTitleFromFolder(rootFolder, fallbackYear);
 
         return new ParsedMedia(
-            isTvShow ? "showextra" : "movieextra",
+            effectiveIsTv ? "showextra" : "movieextra",
             parentTitle,
             fileBaseName,
             null,
