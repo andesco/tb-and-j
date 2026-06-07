@@ -239,6 +239,16 @@ public sealed class TorBoxSyncManager
                 "instead of an authenticated Jellyfin URL. Set JellyfinPublicBaseUrl in plugin config (e.g. https://jelly.andrewe.dev).");
         }
 
+        // Auto-generate a play secret on first use so the endpoint is not guessable.
+        if (!string.IsNullOrWhiteSpace(baseUrl) && string.IsNullOrWhiteSpace(configuration.PlaySecret))
+        {
+            configuration.PlaySecret = Guid.NewGuid().ToString("N");
+            Plugin.Instance.SaveConfiguration();
+            _logger.LogInformation("TB&J: generated play secret for STRM URLs.");
+        }
+
+        var secret = configuration.PlaySecret;
+
         foreach (var record in state.ManagedFiles.Where(i => !i.IsTombstoned))
         {
             if (!StrmPathBuilder.IsUnderRoot(record.StrmPath, configuration.LibraryRootPath))
@@ -249,7 +259,7 @@ public sealed class TorBoxSyncManager
 
             var strmContent = string.IsNullOrWhiteSpace(baseUrl)
                 ? record.DownloadLink
-                : BuildJellyfinPlayUrl(baseUrl, record);
+                : BuildJellyfinPlayUrl(baseUrl, secret, record);
 
             Directory.CreateDirectory(Path.GetDirectoryName(record.StrmPath)!);
 
@@ -260,7 +270,7 @@ public sealed class TorBoxSyncManager
         }
     }
 
-    private static string BuildJellyfinPlayUrl(string jellyfinBase, ManagedFileRecord record)
+    private static string BuildJellyfinPlayUrl(string jellyfinBase, string secret, ManagedFileRecord record)
     {
         // When TorBox stored only an infohash as the item name (magnet links added without
         // a resolved title), fall back to the individual filename which is always descriptive.
@@ -273,7 +283,7 @@ public sealed class TorBoxSyncManager
             displayName = "media";
 
         var name = Uri.EscapeDataString(displayName);
-        return $"{jellyfinBase}/torboxsync/play/{record.TorBoxType}/{record.TorBoxItemId}/{record.TorBoxFileId}/{name}";
+        return $"{jellyfinBase}/torboxsync/play/{secret}/{record.TorBoxType}/{record.TorBoxItemId}/{record.TorBoxFileId}/{name}";
     }
 
     private static bool IsHexHash(string value)

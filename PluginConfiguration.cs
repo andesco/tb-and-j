@@ -13,6 +13,13 @@ public sealed class PluginConfiguration : BasePluginConfiguration
     /// </summary>
     public string JellyfinPublicBaseUrl { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Random secret included in every play URL so the endpoint is not guessable.
+    /// Auto-generated on first sync if empty. To invalidate all existing STRM links,
+    /// clear this value — the next sync will generate a new secret and rewrite all STRMs.
+    /// </summary>
+    public string PlaySecret { get; set; } = string.Empty;
+
     public string LibraryRootPath { get; set; } = "/var/lib/jellyfin/data/torbox-sync/library";
 
     public bool AutoCreateJellyfinLibraries { get; set; } = true;
