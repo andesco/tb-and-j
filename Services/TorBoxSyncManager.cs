@@ -146,14 +146,27 @@ public sealed class TorBoxSyncManager
         }
     }
 
+    // Folder names that indicate non-canonical content — years found inside these
+    // subdirectories are pilot/bonus years, not the series premiere year.
+    private static readonly HashSet<string> _nonCanonicalFolders = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "extras", "extra", "bonus", "bonus features", "featurettes", "featurette",
+        "behind the scenes", "deleted scenes", "trailers", "trailer", "interviews",
+        "shorts", "clips", "specials", "special", "season 0", "season 00", "s00",
+        "pilot", "pilots",
+    };
+
     private static Dictionary<string, int?> BuildEarliestYearMap(IReadOnlyList<TorBoxFileCandidate> candidates)
     {
         var result = new Dictionary<string, int?>(StringComparer.OrdinalIgnoreCase);
         foreach (var group in candidates.GroupBy(c => $"{c.TorBoxType}:{c.ItemId}"))
         {
-            // Mine years from every available string for this download item, then take
-            // the smallest (= series premiere year, or theatrical release year for movies).
-            var years = group
+            // Mine years only from main episode/movie files, skipping anything inside
+            // Pilot/, Extras/, Specials/ etc. subdirectories. Pilots have earlier years
+            // than the series premiere, which would produce the wrong folder name.
+            var mainFiles = group.Where(c => !IsNonCanonicalPath(c.Path));
+
+            var years = mainFiles
                 .SelectMany(c => new[] { c.FileName, c.Path, c.ItemName })
                 .Select(StrmPathBuilder.ExtractFirstYear)
                 .Where(y => y.HasValue)
@@ -164,6 +177,18 @@ public sealed class TorBoxSyncManager
             result[group.Key] = years.Count > 0 ? years[0] : null;
         }
         return result;
+    }
+
+    private static bool IsNonCanonicalPath(string path)
+    {
+        var parts = path.Split(new[] { '/', '\\' }, StringSplitOptions.RemoveEmptyEntries);
+        // Check every intermediate directory (skip root [0] and filename [^1])
+        for (var i = 1; i < parts.Length - 1; i++)
+        {
+            if (_nonCanonicalFolders.Contains(parts[i].Trim()))
+                return true;
+        }
+        return false;
     }
 
     private void UpsertCandidates(
