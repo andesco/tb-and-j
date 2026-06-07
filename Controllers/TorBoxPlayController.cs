@@ -1,11 +1,9 @@
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Jellyfin.Plugin.TorBoxSync.Controllers;
 
 [ApiController]
-[Authorize(AuthenticationSchemes = "CustomAuthentication")]
 [Route("torboxsync")]
 public sealed class TorBoxPlayController : ControllerBase
 {
@@ -17,8 +15,12 @@ public sealed class TorBoxPlayController : ControllerBase
     };
 
     /// <summary>
-    /// Authenticated Jellyfin play endpoint — redirects to the TorBox CDN download URL.
-    /// The trailing {**name} segment is human-readable and ignored by the redirect logic.
+    /// Unauthenticated play endpoint — Infuse (and other Jellyfin clients) make the
+    /// stream request without Jellyfin credentials, so we cannot require auth here.
+    /// The TorBox API key is kept server-side; the redirect target requires TorBox
+    /// auth, so the content itself is still protected.
+    /// The {**name} catch-all is human-readable metadata only; the redirect uses
+    /// only torboxType, itemId, and fileId.
     /// </summary>
     [HttpGet("play/{torboxType}/{itemId}/{fileId}/{**name}")]
     [ProducesResponseType(StatusCodes.Status302Found)]
