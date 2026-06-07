@@ -23,17 +23,21 @@ public sealed class TorBoxPlayController : ControllerBase
     }
 
     /// <summary>
-    /// Redirects to TorBox CDN. The {secret} path segment is a random token stored in
-    /// plugin config and embedded in every STRM URL — wrong or missing secret returns
-    /// 404 so the endpoint does not reveal its own existence to scanners.
-    /// No Jellyfin auth is required here because Infuse sends stream requests without
-    /// credentials; the secret provides the access control instead.
+    /// Redirects to TorBox. The ?s= query param is a per-instance secret stored in
+    /// plugin config and appended to every STRM URL at sync time. Wrong or missing
+    /// secret returns 404 so the endpoint does not reveal its own existence.
+    /// No Jellyfin auth is required — Infuse sends stream requests as raw HTTP
+    /// with no credentials; the secret provides the access control instead.
     /// </summary>
-    [HttpGet("play/{secret}/{torboxType}/{itemId}/{fileId}/{**name}")]
+    [HttpGet("play/{torboxType}/{itemId}/{fileId}/{**name}")]
     [ProducesResponseType(StatusCodes.Status302Found)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
-    public IActionResult Play(string secret, string torboxType, string itemId, string fileId)
+    public IActionResult Play(
+        string torboxType,
+        string itemId,
+        string fileId,
+        [FromQuery(Name = "s")] string? secret)
     {
         var expectedSecret = Plugin.Instance.Configuration.PlaySecret;
         if (string.IsNullOrWhiteSpace(expectedSecret) || secret != expectedSecret)
@@ -53,7 +57,7 @@ public sealed class TorBoxPlayController : ControllerBase
             + $"&file_id={Uri.EscapeDataString(fileId)}"
             + "&redirect=true";
 
-        _logger.LogDebug("TorBoxPlay: {Type}/{Item}/{File} → TorBox", torboxType, itemId, fileId);
+        _logger.LogDebug("TorBoxPlay: {Type}/{Item}/{File}", torboxType, itemId, fileId);
         return Redirect(redirectUrl);
     }
 }

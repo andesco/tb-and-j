@@ -283,7 +283,7 @@ public sealed class TorBoxSyncManager
             displayName = "media";
 
         var name = Uri.EscapeDataString(displayName);
-        return $"{jellyfinBase}/torboxsync/play/{secret}/{record.TorBoxType}/{record.TorBoxItemId}/{record.TorBoxFileId}/{name}";
+        return $"{jellyfinBase}/torboxsync/play/{record.TorBoxType}/{record.TorBoxItemId}/{record.TorBoxFileId}/{name}?s={secret}";
     }
 
     private static bool IsHexHash(string value)
