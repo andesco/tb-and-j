@@ -61,7 +61,6 @@ public sealed class TorBoxSyncManager
             progress?.Report(70);
 
             WriteDesiredStrmFiles(state, configuration);
-            WriteDesiredNfoFiles(state);
             CleanupUnmanagedStrmFiles(state, configuration);
             progress?.Report(85);
 
@@ -179,6 +178,14 @@ public sealed class TorBoxSyncManager
 
     private void WriteDesiredStrmFiles(TorBoxSyncState state, PluginConfiguration configuration)
     {
+        var baseUrl = configuration.JellyfinPublicBaseUrl?.TrimEnd('/');
+        if (string.IsNullOrWhiteSpace(baseUrl))
+        {
+            _logger.LogWarning(
+                "JellyfinPublicBaseUrl is not configured. STRM files will contain the raw TorBox API URL " +
+                "instead of an authenticated Jellyfin URL. Set JellyfinPublicBaseUrl in plugin config (e.g. https://jelly.andrewe.dev).");
+        }
+
         foreach (var record in state.ManagedFiles.Where(i => !i.IsTombstoned))
         {
             if (!StrmPathBuilder.IsUnderRoot(record.StrmPath, configuration.LibraryRootPath))
@@ -187,42 +194,24 @@ public sealed class TorBoxSyncManager
                 continue;
             }
 
+            var strmContent = string.IsNullOrWhiteSpace(baseUrl)
+                ? record.DownloadLink
+                : BuildJellyfinPlayUrl(baseUrl, record);
+
             Directory.CreateDirectory(Path.GetDirectoryName(record.StrmPath)!);
 
-            // Skip write when the STRM already contains the current link — avoids triggering
-            // Jellyfin's file-change scanner on every sync pass for unmodified items.
-            if (File.Exists(record.StrmPath)
-                && File.ReadAllText(record.StrmPath) == record.DownloadLink)
-            {
+            if (File.Exists(record.StrmPath) && File.ReadAllText(record.StrmPath) == strmContent)
                 continue;
-            }
 
-            File.WriteAllText(record.StrmPath, record.DownloadLink);
+            File.WriteAllText(record.StrmPath, strmContent);
         }
     }
 
-    private void WriteDesiredNfoFiles(TorBoxSyncState state)
+    private static string BuildJellyfinPlayUrl(string jellyfinBase, ManagedFileRecord record)
     {
-        foreach (var record in state.ManagedFiles.Where(i => !i.IsTombstoned))
-        {
-            if (string.IsNullOrWhiteSpace(record.StrmPath) || string.IsNullOrWhiteSpace(record.TorBoxItemName))
-                continue;
-
-            var nfoPath = Path.ChangeExtension(record.StrmPath, ".nfo");
-            var rootElement = record.MediaKind == "episode" ? "episodedetails" : "movie";
-            var tagText = $"TorBox: {record.TorBoxItemName}";
-            var nfoContent = $"""
-                <?xml version="1.0" encoding="utf-8"?>
-                <{rootElement}>
-                  <tag>{System.Security.SecurityElement.Escape(tagText)}</tag>
-                </{rootElement}>
-                """;
-
-            if (File.Exists(nfoPath) && File.ReadAllText(nfoPath) == nfoContent)
-                continue;
-
-            File.WriteAllText(nfoPath, nfoContent);
-        }
+        var name = Uri.EscapeDataString(
+            string.IsNullOrWhiteSpace(record.TorBoxItemName) ? "media" : record.TorBoxItemName);
+        return $"{jellyfinBase}/torboxsync/play/{record.TorBoxType}/{record.TorBoxItemId}/{record.TorBoxFileId}/{name}";
     }
 
     private void CleanupUnmanagedStrmFiles(TorBoxSyncState state, PluginConfiguration configuration)
@@ -237,10 +226,6 @@ public sealed class TorBoxSyncManager
             .Select(i => StrmPathBuilder.NormalizePath(i.StrmPath))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-        var desiredNfos = desired
-            .Select(p => StrmPathBuilder.NormalizePath(Path.ChangeExtension(p, ".nfo")))
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
         foreach (var strmPath in Directory.EnumerateFiles(configuration.LibraryRootPath, "*.strm", SearchOption.AllDirectories))
         {
             var normalizedPath = StrmPathBuilder.NormalizePath(strmPath);
@@ -250,14 +235,10 @@ public sealed class TorBoxSyncManager
             }
         }
 
-        // Remove orphaned NFO sidecars that no longer have a matching managed STRM.
+        // Remove any .nfo sidecars left over from a previous plugin version.
         foreach (var nfoPath in Directory.EnumerateFiles(configuration.LibraryRootPath, "*.nfo", SearchOption.AllDirectories))
         {
-            var normalizedNfo = StrmPathBuilder.NormalizePath(nfoPath);
-            if (!desiredNfos.Contains(normalizedNfo))
-            {
-                try { File.Delete(nfoPath); } catch { /* best effort */ }
-            }
+            try { File.Delete(nfoPath); } catch { /* best effort */ }
         }
     }
 
@@ -390,13 +371,6 @@ public sealed class TorBoxSyncManager
             if (File.Exists(path))
             {
                 File.Delete(path);
-            }
-
-            // Remove companion NFO sidecar if present
-            var nfo = Path.ChangeExtension(path, ".nfo");
-            if (File.Exists(nfo))
-            {
-                File.Delete(nfo);
             }
 
             PruneEmptyParentDirectories(path, configuration.LibraryRootPath);

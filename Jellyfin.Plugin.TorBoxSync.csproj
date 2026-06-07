@@ -19,6 +19,8 @@
     <Reference Include="MediaBrowser.Model" HintPath="/usr/lib/jellyfin/bin/MediaBrowser.Model.dll" Private="false" />
     <Reference Include="Jellyfin.Api" HintPath="/usr/lib/jellyfin/bin/Jellyfin.Api.dll" Private="false" />
     <Reference Include="Jellyfin.Data" HintPath="/usr/lib/jellyfin/bin/Jellyfin.Data.dll" Private="false" />
+    <Reference Include="Microsoft.AspNetCore.Authorization" HintPath="/usr/lib/jellyfin/bin/Microsoft.AspNetCore.Authorization.dll" Private="false" />
+    <Reference Include="Microsoft.AspNetCore.Http.Abstractions" HintPath="/usr/lib/jellyfin/bin/Microsoft.AspNetCore.Http.Abstractions.dll" Private="false" />
     <Reference Include="Microsoft.AspNetCore.Mvc.Abstractions" HintPath="/usr/lib/jellyfin/bin/Microsoft.AspNetCore.Mvc.Abstractions.dll" Private="false" />
     <Reference Include="Microsoft.AspNetCore.Mvc.Core" HintPath="/usr/lib/jellyfin/bin/Microsoft.AspNetCore.Mvc.Core.dll" Private="false" />
     <Reference Include="Microsoft.Extensions.DependencyInjection.Abstractions" HintPath="/usr/lib/jellyfin/bin/Microsoft.Extensions.DependencyInjection.Abstractions.dll" Private="false" />

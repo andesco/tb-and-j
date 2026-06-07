@@ -6,6 +6,13 @@ public sealed class PluginConfiguration : BasePluginConfiguration
 {
     public string TorBoxApiKey { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Public base URL of this Jellyfin server (no trailing slash), e.g. https://jelly.andrewe.dev
+    /// STRM files are written with this as the host so Infuse can authenticate using its
+    /// existing Jellyfin credentials. The plugin controller then redirects to TorBox.
+    /// </summary>
+    public string JellyfinPublicBaseUrl { get; set; } = string.Empty;
+
     public string LibraryRootPath { get; set; } = "/var/lib/jellyfin/data/torbox-sync/library";
 
     public bool AutoCreateJellyfinLibraries { get; set; } = true;
