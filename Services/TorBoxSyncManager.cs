@@ -146,16 +146,44 @@ public sealed class TorBoxSyncManager
         }
     }
 
+    private static Dictionary<string, int?> BuildEarliestYearMap(IReadOnlyList<TorBoxFileCandidate> candidates)
+    {
+        var result = new Dictionary<string, int?>(StringComparer.OrdinalIgnoreCase);
+        foreach (var group in candidates.GroupBy(c => $"{c.TorBoxType}:{c.ItemId}"))
+        {
+            // Mine years from every available string for this download item, then take
+            // the smallest (= series premiere year, or theatrical release year for movies).
+            var years = group
+                .SelectMany(c => new[] { c.FileName, c.Path, c.ItemName })
+                .Select(StrmPathBuilder.ExtractFirstYear)
+                .Where(y => y.HasValue)
+                .Select(y => y!.Value)
+                .Order()
+                .ToList();
+
+            result[group.Key] = years.Count > 0 ? years[0] : null;
+        }
+        return result;
+    }
+
     private void UpsertCandidates(
         TorBoxSyncState state,
         IReadOnlyList<TorBoxFileCandidate> candidates,
         PluginConfiguration configuration,
         DateTimeOffset now)
     {
+        // For each TorBox download item, find the earliest year present in any of its
+        // file names or paths. Used as a fallback when the show/movie title itself
+        // carries no year (e.g. "The.Planets.S01.BluRay" has no year in the root folder,
+        // but individual episode files may be dated).
+        var earliestYearByItemKey = BuildEarliestYearMap(candidates);
+
         var existingByKey = state.ManagedFiles.ToDictionary(i => i.Key, StringComparer.OrdinalIgnoreCase);
         foreach (var candidate in candidates)
         {
-            var newRecord = StrmPathBuilder.ToManagedRecord(candidate, configuration.LibraryRootPath, now);
+            var itemKey = $"{candidate.TorBoxType}:{candidate.ItemId}";
+            earliestYearByItemKey.TryGetValue(itemKey, out var fallbackYear);
+            var newRecord = StrmPathBuilder.ToManagedRecord(candidate, configuration.LibraryRootPath, now, fallbackYear);
             if (existingByKey.TryGetValue(newRecord.Key, out var existing))
             {
                 existing.TorBoxItemName = newRecord.TorBoxItemName;

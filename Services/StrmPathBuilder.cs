@@ -5,9 +5,9 @@ namespace Jellyfin.Plugin.TorBoxSync.Services;
 
 public static partial class StrmPathBuilder
 {
-    public static ManagedFileRecord ToManagedRecord(TorBoxFileCandidate candidate, string libraryRootPath, DateTimeOffset now)
+    public static ManagedFileRecord ToManagedRecord(TorBoxFileCandidate candidate, string libraryRootPath, DateTimeOffset now, int? fallbackYear = null)
     {
-        var parsed = ParseCandidate(candidate);
+        var parsed = ParseCandidate(candidate, fallbackYear);
 
         var relativePath = parsed.MediaKind switch
         {
@@ -52,6 +52,17 @@ public static partial class StrmPathBuilder
         };
     }
 
+    /// <summary>
+    /// Returns the first 4-digit year (1900-2099) found in <paramref name="text"/>, or null.
+    /// Used by TorBoxSyncManager to mine the earliest year across all files in a torrent.
+    /// </summary>
+    public static int? ExtractFirstYear(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return null;
+        var m = YearPattern().Match(text);
+        return m.Success ? int.Parse(m.Groups["year"].Value) : null;
+    }
+
     public static bool IsUnderRoot(string path, string rootPath)
     {
         var fullPath = Path.GetFullPath(path);
@@ -62,20 +73,20 @@ public static partial class StrmPathBuilder
     public static string NormalizePath(string path)
         => Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
 
-    private static ParsedMedia ParseCandidate(TorBoxFileCandidate candidate)
+    private static ParsedMedia ParseCandidate(TorBoxFileCandidate candidate, int? fallbackYear = null)
     {
         var episodeMatch = EpisodePattern().Match(candidate.FileName);
         if (!episodeMatch.Success)
             episodeMatch = EpisodePattern().Match(candidate.Path);
 
         if (episodeMatch.Success)
-            return ParseEpisode(candidate, episodeMatch);
+            return ParseEpisode(candidate, episodeMatch, fallbackYear);
 
-        var extras = TryParseExtras(candidate);
+        var extras = TryParseExtras(candidate, fallbackYear);
         if (extras is not null)
             return extras;
 
-        return ParseMovie(candidate);
+        return ParseMovie(candidate, fallbackYear);
     }
 
     // ── Extras / specials detection ──────────────────────────────────────────
@@ -116,7 +127,7 @@ public static partial class StrmPathBuilder
         ["s00"] = "Season 00",
     };
 
-    private static ParsedMedia? TryParseExtras(TorBoxFileCandidate candidate)
+    private static ParsedMedia? TryParseExtras(TorBoxFileCandidate candidate, int? fallbackYear = null)
     {
         if (string.IsNullOrWhiteSpace(candidate.Path))
             return null;
@@ -154,7 +165,7 @@ public static partial class StrmPathBuilder
 
         var fileBaseName = Path.GetFileNameWithoutExtension(fileName);
         var isTvShow     = hasSeasonIntermediate || LooksLikeTvShowFolder(rootFolder);
-        var parentTitle  = ExtractTitleFromFolder(rootFolder);
+        var parentTitle  = ExtractTitleFromFolder(rootFolder, fallbackYear);
 
         return new ParsedMedia(
             isTvShow ? "showextra" : "movieextra",
@@ -180,7 +191,7 @@ public static partial class StrmPathBuilder
         return false;
     }
 
-    private static string ExtractTitleFromFolder(string folderName)
+    private static string ExtractTitleFromFolder(string folderName, int? fallbackYear = null)
     {
         // Strip from the season/quality marker onward, then run through the
         // normal title + year extractor so we get "(YYYY)" when a year is present.
@@ -192,10 +203,12 @@ public static partial class StrmPathBuilder
         if (string.IsNullOrWhiteSpace(title))
             title = CleanTitleText(stripped);
 
-        return string.IsNullOrWhiteSpace(title) ? "Unknown" : FormatTitle(title, year);
+        // If the folder name carries no year, use the earliest year found across the
+        // torrent's media files (supplied by the caller from BuildEarliestYearMap).
+        return string.IsNullOrWhiteSpace(title) ? "Unknown" : FormatTitle(title, year ?? fallbackYear);
     }
 
-    private static ParsedMedia ParseEpisode(TorBoxFileCandidate candidate, Match episodeMatch)
+    private static ParsedMedia ParseEpisode(TorBoxFileCandidate candidate, Match episodeMatch, int? fallbackYear = null)
     {
         var seasonNumber = int.Parse(episodeMatch.Groups["season"].Value);
         var episodeNumber = int.Parse(episodeMatch.Groups["episode"].Value);
@@ -211,7 +224,7 @@ public static partial class StrmPathBuilder
             showTitle = "Unknown";
         }
 
-        var displayName = FormatTitle(showTitle, showYear);
+        var displayName = FormatTitle(showTitle, showYear ?? fallbackYear);
         var episodeCode = $"S{seasonNumber:00}E{episodeNumber:00}";
         var extraEpisodeNumbers = ParseExtraEpisodeNumbers(episodeMatch.Groups["extra"].Value, episodeNumber);
         if (extraEpisodeNumbers.Count > 0)
@@ -229,7 +242,7 @@ public static partial class StrmPathBuilder
         return new ParsedMedia("episode", displayName, fileBaseName, seasonNumber, episodeNumber);
     }
 
-    private static ParsedMedia ParseMovie(TorBoxFileCandidate candidate)
+    private static ParsedMedia ParseMovie(TorBoxFileCandidate candidate, int? fallbackYear = null)
     {
         var (title, year) = ParseTitleAndYear(candidate.ItemName);
         if (string.IsNullOrWhiteSpace(title) || LooksLikeHash(title))
@@ -242,7 +255,7 @@ public static partial class StrmPathBuilder
             title = "Unknown";
         }
 
-        var displayName = FormatTitle(title, year);
+        var displayName = FormatTitle(title, year ?? fallbackYear);
         var versionSuffix = ExtractVersionSuffix(candidate.FileName);
         var fileBaseName = string.IsNullOrWhiteSpace(versionSuffix)
             ? displayName
@@ -442,7 +455,22 @@ public static partial class StrmPathBuilder
         int? EpisodeNumber,
         string? ExtrasFolder = null);
 
-    [GeneratedRegex(@"(?i)(?<prefix>.*?)(?:(?:[SsTt](?<season>\d{1,4})[ ._\-\[\(]*(?:[Ee][Pp]?)[ ._-]*(?<episode>\d{1,4})(?<extra>(?:[ ._-]*(?:[Ee][Pp]?|x|-)[ ._-]*\d{1,4})*))|(?:(?<season>\d{1,4})[ ._-]*x[ ._-]*(?<episode>\d{1,4})(?<extra>(?:[ ._-]*(?:x|-)[ ._-]*\d{1,4})*))|(?:Season[ ._-]*(?<season>\d{1,4})[ ._-]*Episode[ ._-]*(?<episode>\d{1,4})(?<extra>(?:[ ._-]*(?:Episode|-)[ ._-]*\d{1,4})*)))(?<tail>.*)$", RegexOptions.Compiled)]
+    // NxM alternative uses (?<!\w) + no separator around 'x' so that codec tags like
+    // x265 and x264 (e.g. "MP4.x265", "7.1.x265") are never mistaken for episode markers.
+    // Real NxM filenames write the pattern directly adjacent: "Show.4x01.mkv", never "4.x.265".
+    [GeneratedRegex(
+        @"(?i)(?<prefix>.*?)" +
+        @"(?:" +
+            // Standard SxxExx / TxxExx
+            @"(?:[SsTt](?<season>\d{1,4})[ ._\-\[\(]*(?:[Ee][Pp]?)[ ._-]*(?<episode>\d{1,4})(?<extra>(?:[ ._-]*(?:[Ee][Pp]?|x|-)[ ._-]*\d{1,4})*))" +
+            // NxM (e.g. 4x01) — season and episode must be directly adjacent to 'x' with no
+            // separator, and the season must not be preceded by another word character so that
+            // codec suffixes like MP4.x265 or 7.1.x265 are excluded.
+            @"|(?:(?<!\w)(?<season>\d{1,2})x(?<episode>\d{1,3})(?<extra>(?:[ ._-]*(?:x|-)[ ._-]*\d{1,4})*))" +
+            // "Season N Episode M" word form
+            @"|(?:Season[ ._-]*(?<season>\d{1,4})[ ._-]*Episode[ ._-]*(?<episode>\d{1,4})(?<extra>(?:[ ._-]*(?:Episode|-)[ ._-]*\d{1,4})*))" +
+        @")(?<tail>.*)$",
+        RegexOptions.Compiled)]
     private static partial Regex EpisodePattern();
 
     [GeneratedRegex(@"(?i)(?<prefix>.*?)(?:\b[Ss](?<season>\d{1,4})\b|\bSeason[ ._-]*(?<season>\d{1,4})\b).*$", RegexOptions.Compiled)]
@@ -451,7 +479,7 @@ public static partial class StrmPathBuilder
     [GeneratedRegex(@"\b(?<year>19\d{2}|20\d{2})\b", RegexOptions.Compiled)]
     private static partial Regex YearPattern();
 
-    [GeneratedRegex(@"[._]+", RegexOptions.Compiled)]
+    [GeneratedRegex(@"[._-]+", RegexOptions.Compiled)]
     private static partial Regex SeparatorPattern();
 
     [GeneratedRegex(@"\b(2160p|1080p|720p|576p|540p|480p|WEB[-_. ]?DL|WEBRip|WEB[-_. ]?Mux|Blu[-_. ]?Ray|BDMux|BDRemux|BRRip|BDRip|DVD[-_. ]?Rip|REMUX|UHD|HDR10?\+?|DV|DoVi|HEVC|H\.?265|x265|H\.?264|x264|AV1|XviD|DivX|AMZN|ATVP|DSNP|NF|HMAX|MAX|Hulu|PCOK|iTunes|DDP?5\.1|DDP?7\.1|EAC3|AC3|DDP|DTS|TrueHD|Atmos|AAC[25]?\.1?|FLAC|Opus)\b.*$", RegexOptions.IgnoreCase | RegexOptions.Compiled)]
@@ -475,7 +503,9 @@ public static partial class StrmPathBuilder
     [GeneratedRegex(@"\[[^\]]{1,40}\]|\([^\)]{1,40}\)$", RegexOptions.Compiled)]
     private static partial Regex BracketedTokenPattern();
 
-    [GeneratedRegex(@"[-–—]\s*[A-Za-z0-9]{2,20}$", RegexOptions.Compiled)]
+    // Scene group suffixes are ALL-CAPS or all-digits (e.g. -YIFY, -RARBG, -NTB).
+    // Titlecase words like "-Planets" are part of the title, not a group name.
+    [GeneratedRegex(@"[-–—]\s*[A-Z0-9]{2,8}$", RegexOptions.Compiled)]
     private static partial Regex TrailingGroupPattern();
 
     [GeneratedRegex(@"[\s\-–—]+$", RegexOptions.Compiled)]
