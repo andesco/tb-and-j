@@ -12,7 +12,7 @@
         "changelog": "Initial TB&J TorBox STRM sync and managed tombstone deletion prototype.",
         "targetAbi": "10.11.10.0",
         "sourceUrl": "https://raw.githubusercontent.com/andesco/tb-and-j/main/dist/tb-and-j_0.1.0.0.zip",
-        "checksum": "42b8790f8b543a6ede9c4330301645db",
+        "checksum": "c2dac1af7ab69be2f44fe34610b04847",
         "timestamp": "2026-06-06T00:00:00Z"
       }
     ]

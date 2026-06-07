@@ -167,9 +167,17 @@ public static partial class StrmPathBuilder
         if (jellyfinFolder is null)
             return null;
 
-        var fileBaseName    = Path.GetFileNameWithoutExtension(fileName);
-        var effectiveIsTv   = isTvShow || hasSeasonIntermediate;
-        var parentTitle     = ExtractTitleFromFolder(rootFolder, fallbackYear);
+        var fileBaseName  = Path.GetFileNameWithoutExtension(fileName);
+        var effectiveIsTv = isTvShow || hasSeasonIntermediate;
+        var parentTitle   = ExtractTitleFromFolder(rootFolder, fallbackYear);
+
+        // Jellyfin's TV library scanner does not properly index named extras
+        // subfolders (extras/, featurettes/, etc.) — files land as orphaned Video
+        // items with no parent and are invisible in the UI. Season 00 (Specials)
+        // is a real season that Jellyfin indexes correctly, so route all TV show
+        // extras there regardless of which subfolder they came from.
+        if (effectiveIsTv)
+            jellyfinFolder = "Season 00";
 
         return new ParsedMedia(
             effectiveIsTv ? "showextra" : "movieextra",
