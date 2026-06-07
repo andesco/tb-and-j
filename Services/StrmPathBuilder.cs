@@ -185,7 +185,12 @@ public static partial class StrmPathBuilder
         cleaned = BracketedTokenPattern().Replace(cleaned, " ");
         cleaned = TrailingGroupPattern().Replace(cleaned, string.Empty);
         cleaned = DanglingSeparatorsPattern().Replace(cleaned, " ");
-        return WhitespacePattern().Replace(cleaned, " ").Trim();
+        cleaned = WhitespacePattern().Replace(cleaned, " ").Trim();
+        // Strip any trailing unclosed bracket/paren left after the above passes
+        // (happens when e.g. "(2160p)" is the last token before the year and the
+        // open paren survives after BracketedTokenPattern strips the closed pair).
+        cleaned = TrailingUnclosedBracketPattern().Replace(cleaned, string.Empty).TrimEnd();
+        return cleaned;
     }
 
     private static string PrecleanName(string value)
@@ -356,4 +361,7 @@ public static partial class StrmPathBuilder
 
     [GeneratedRegex(@"\s+", RegexOptions.Compiled)]
     private static partial Regex WhitespacePattern();
+
+    [GeneratedRegex(@"[\(\[]\s*$", RegexOptions.Compiled)]
+    private static partial Regex TrailingUnclosedBracketPattern();
 }

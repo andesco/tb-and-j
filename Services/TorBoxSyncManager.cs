@@ -61,6 +61,7 @@ public sealed class TorBoxSyncManager
             progress?.Report(70);
 
             WriteDesiredStrmFiles(state, configuration);
+            WriteDesiredNfoFiles(state);
             CleanupUnmanagedStrmFiles(state, configuration);
             progress?.Report(85);
 
@@ -187,7 +188,40 @@ public sealed class TorBoxSyncManager
             }
 
             Directory.CreateDirectory(Path.GetDirectoryName(record.StrmPath)!);
+
+            // Skip write when the STRM already contains the current link — avoids triggering
+            // Jellyfin's file-change scanner on every sync pass for unmodified items.
+            if (File.Exists(record.StrmPath)
+                && File.ReadAllText(record.StrmPath) == record.DownloadLink)
+            {
+                continue;
+            }
+
             File.WriteAllText(record.StrmPath, record.DownloadLink);
+        }
+    }
+
+    private void WriteDesiredNfoFiles(TorBoxSyncState state)
+    {
+        foreach (var record in state.ManagedFiles.Where(i => !i.IsTombstoned))
+        {
+            if (string.IsNullOrWhiteSpace(record.StrmPath) || string.IsNullOrWhiteSpace(record.TorBoxItemName))
+                continue;
+
+            var nfoPath = Path.ChangeExtension(record.StrmPath, ".nfo");
+            var rootElement = record.MediaKind == "episode" ? "episodedetails" : "movie";
+            var tagText = $"TorBox: {record.TorBoxItemName}";
+            var nfoContent = $"""
+                <?xml version="1.0" encoding="utf-8"?>
+                <{rootElement}>
+                  <tag>{System.Security.SecurityElement.Escape(tagText)}</tag>
+                </{rootElement}>
+                """;
+
+            if (File.Exists(nfoPath) && File.ReadAllText(nfoPath) == nfoContent)
+                continue;
+
+            File.WriteAllText(nfoPath, nfoContent);
         }
     }
 
@@ -203,12 +237,26 @@ public sealed class TorBoxSyncManager
             .Select(i => StrmPathBuilder.NormalizePath(i.StrmPath))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
+        var desiredNfos = desired
+            .Select(p => StrmPathBuilder.NormalizePath(Path.ChangeExtension(p, ".nfo")))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
         foreach (var strmPath in Directory.EnumerateFiles(configuration.LibraryRootPath, "*.strm", SearchOption.AllDirectories))
         {
             var normalizedPath = StrmPathBuilder.NormalizePath(strmPath);
             if (!desired.Contains(normalizedPath))
             {
                 TryDeleteFileAndPrune(strmPath, configuration);
+            }
+        }
+
+        // Remove orphaned NFO sidecars that no longer have a matching managed STRM.
+        foreach (var nfoPath in Directory.EnumerateFiles(configuration.LibraryRootPath, "*.nfo", SearchOption.AllDirectories))
+        {
+            var normalizedNfo = StrmPathBuilder.NormalizePath(nfoPath);
+            if (!desiredNfos.Contains(normalizedNfo))
+            {
+                try { File.Delete(nfoPath); } catch { /* best effort */ }
             }
         }
     }
@@ -342,6 +390,13 @@ public sealed class TorBoxSyncManager
             if (File.Exists(path))
             {
                 File.Delete(path);
+            }
+
+            // Remove companion NFO sidecar if present
+            var nfo = Path.ChangeExtension(path, ".nfo");
+            if (File.Exists(nfo))
+            {
+                File.Delete(nfo);
             }
 
             PruneEmptyParentDirectories(path, configuration.LibraryRootPath);
