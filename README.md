@@ -64,6 +64,8 @@ https://jelly.example.com/torboxsync/play/torrents/12345/1/Movie.Title.2024?s=<s
 
 When a client plays the item, Jellyfin hits this endpoint, validates the secret, and returns a `302` redirect to the TorBox CDN. Your server handles no video data. The TorBox API key is never sent to the client.
 
+Sync is skipped when `JellyfinPublicBaseUrl` is not configured. The plugin never writes raw TorBox API URLs containing the API key into STRM files or persistent sync state.
+
 The `?s=` secret is a random 32-character hex token unique to your installation. It is embedded in every STRM file at sync time and validated on every play request — wrong or missing secret returns `404`. To rotate it, clear `PlaySecret` in the config XML and trigger a sync; all STRM files will be rewritten with the new secret.
 
 ### File classification

@@ -41,6 +41,12 @@ public sealed class TorBoxSyncManager
                 return;
             }
 
+            if (string.IsNullOrWhiteSpace(configuration.JellyfinPublicBaseUrl))
+            {
+                _logger.LogError("TorBox Sync skipped because JellyfinPublicBaseUrl is not configured.");
+                return;
+            }
+
             await _libraryProvisioner.EnsureLibrariesAsync(configuration, refreshLibrary: false, cancellationToken).ConfigureAwait(false);
             progress?.Report(5);
 
@@ -246,7 +252,6 @@ public sealed class TorBoxSyncManager
                 existing.EpisodeNumber = newRecord.EpisodeNumber;
                 existing.RelativeStrmPath = newRecord.RelativeStrmPath;
                 existing.StrmPath = newRecord.StrmPath;
-                existing.DownloadLink = newRecord.DownloadLink;
                 existing.LastSeenUtc = now;
                 existing.ConsecutiveRemoteMisses = 0;
                 if (string.Equals(existing.TombstoneReason, "remote-missing", StringComparison.OrdinalIgnoreCase))
@@ -313,13 +318,11 @@ public sealed class TorBoxSyncManager
         var baseUrl = configuration.JellyfinPublicBaseUrl?.TrimEnd('/');
         if (string.IsNullOrWhiteSpace(baseUrl))
         {
-            _logger.LogWarning(
-                "JellyfinPublicBaseUrl is not configured. STRM files will contain the raw TorBox API URL " +
-                "instead of an authenticated Jellyfin URL. Set JellyfinPublicBaseUrl in plugin config (e.g. https://jelly.andrewe.dev).");
+            throw new InvalidOperationException("JellyfinPublicBaseUrl is required to write secure STRM files.");
         }
 
         // Auto-generate a play secret on first use so the endpoint is not guessable.
-        if (!string.IsNullOrWhiteSpace(baseUrl) && string.IsNullOrWhiteSpace(configuration.PlaySecret))
+        if (string.IsNullOrWhiteSpace(configuration.PlaySecret))
         {
             configuration.PlaySecret = Guid.NewGuid().ToString("N");
             Plugin.Instance.SaveConfiguration();
@@ -336,9 +339,7 @@ public sealed class TorBoxSyncManager
                 continue;
             }
 
-            var strmContent = string.IsNullOrWhiteSpace(baseUrl)
-                ? record.DownloadLink
-                : BuildJellyfinPlayUrl(baseUrl, secret, record);
+            var strmContent = BuildJellyfinPlayUrl(baseUrl, secret, record);
 
             Directory.CreateDirectory(Path.GetDirectoryName(record.StrmPath)!);
 

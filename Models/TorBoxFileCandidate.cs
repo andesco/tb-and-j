@@ -15,6 +15,4 @@ public sealed class TorBoxFileCandidate
     public string Path { get; init; } = string.Empty;
 
     public string MimeType { get; init; } = string.Empty;
-
-    public string DownloadLink { get; init; } = string.Empty;
 }

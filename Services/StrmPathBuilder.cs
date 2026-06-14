@@ -46,7 +46,6 @@ public static partial class StrmPathBuilder
             EpisodeNumber = parsed.EpisodeNumber,
             RelativeStrmPath = relativePath,
             StrmPath = Path.GetFullPath(Path.Combine(libraryRootPath, relativePath)),
-            DownloadLink = candidate.DownloadLink,
             FirstSeenUtc = now,
             LastSeenUtc = now
         };

@@ -92,8 +92,7 @@ public sealed class TorBoxClient
                         ItemName = itemName,
                         FileName = fileName,
                         Path = filePath,
-                        MimeType = mimeType,
-                        DownloadLink = BuildDownloadLink(torBoxType, itemId, fileId, configuration.TorBoxApiKey)
+                        MimeType = mimeType
                     });
                 }
             }
@@ -180,19 +179,6 @@ public sealed class TorBoxClient
         }
 
         return response;
-    }
-
-    private static string BuildDownloadLink(string torBoxType, string itemId, string fileId, string apiKey)
-    {
-        var idParameter = torBoxType switch
-        {
-            "torrents" => "torrent_id",
-            "usenet" => "usenet_id",
-            "webdl" => "web_id",
-            _ => throw new InvalidOperationException($"Unsupported TorBox type '{torBoxType}'.")
-        };
-
-        return $"{ApiBase}/{torBoxType}/requestdl?token={Uri.EscapeDataString(apiKey)}&{idParameter}={Uri.EscapeDataString(itemId)}&file_id={Uri.EscapeDataString(fileId)}&redirect=true";
     }
 
     private static bool IsAllowedVideo(string fileName, string mimeType, IReadOnlyCollection<string> allowedExtensions)

@@ -26,8 +26,6 @@ public sealed class ManagedFileRecord
 
     public string StrmPath { get; set; } = string.Empty;
 
-    public string DownloadLink { get; set; } = string.Empty;
-
     public DateTimeOffset FirstSeenUtc { get; set; }
 
     public DateTimeOffset LastSeenUtc { get; set; }
