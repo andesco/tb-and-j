@@ -8,6 +8,8 @@ public sealed class TorBoxSyncState
 
     public DateTimeOffset? LastSyncCompletedUtc { get; set; }
 
+    public bool LegacyNfoCleanupCompleted { get; set; }
+
     public List<ManagedFileRecord> ManagedFiles { get; set; } = [];
 
     public List<TorBoxDeletionRecord> TorBoxDeletions { get; set; } = [];

@@ -70,12 +70,22 @@ public sealed class TorBoxSyncManager
 
             progress?.Report(45);
             var obsoleteManagedPaths = UpsertCandidates(state, candidates, configuration, now);
-            TombstoneRemoteMissingFiles(state, candidates, unavailableRemoteItemKeys, configuration, now, enabledTypes);
+            var filesystemChanged = TombstoneRemoteMissingFiles(
+                state,
+                candidates,
+                unavailableRemoteItemKeys,
+                configuration,
+                now,
+                enabledTypes);
             progress?.Report(70);
 
-            WriteDesiredStrmFiles(state, configuration);
-            DeleteObsoleteManagedPaths(state, obsoleteManagedPaths, configuration);
-            CleanupUnmanagedStrmFiles(state, configuration);
+            filesystemChanged |= WriteDesiredStrmFiles(state, configuration);
+            filesystemChanged |= DeleteObsoleteManagedPaths(state, obsoleteManagedPaths, configuration);
+            if (filesystemChanged || !state.LegacyNfoCleanupCompleted)
+            {
+                filesystemChanged |= CleanupUnmanagedStrmFiles(state, configuration);
+            }
+
             progress?.Report(85);
 
             await DeleteFullyTombstonedTorBoxItemsAsync(state, configuration, observedRemoteItemKeys, cancellationToken).ConfigureAwait(false);
@@ -88,7 +98,10 @@ public sealed class TorBoxSyncManager
                 state.ManagedFiles.Count,
                 state.ManagedFiles.Count(i => i.IsTombstoned));
 
-            await _libraryManager.ValidateMediaLibrary(new Progress<double>(), cancellationToken).ConfigureAwait(false);
+            if (filesystemChanged)
+            {
+                await _libraryManager.ValidateMediaLibrary(new Progress<double>(), cancellationToken).ConfigureAwait(false);
+            }
         }
         finally
         {
@@ -290,16 +303,17 @@ public sealed class TorBoxSyncManager
         }
     }
 
-    private void DeleteObsoleteManagedPaths(
+    private bool DeleteObsoleteManagedPaths(
         TorBoxSyncState state,
         IReadOnlyList<string> obsoleteManagedPaths,
         PluginConfiguration configuration)
     {
         if (obsoleteManagedPaths.Count == 0)
         {
-            return;
+            return false;
         }
 
+        var changed = false;
         var desiredPaths = state.ManagedFiles
             .Where(record => !record.IsTombstoned)
             .Select(record => StrmPathBuilder.NormalizePath(record.StrmPath))
@@ -308,12 +322,14 @@ public sealed class TorBoxSyncManager
         {
             if (!desiredPaths.Contains(StrmPathBuilder.NormalizePath(obsoletePath)))
             {
-                TryDeleteFileAndPrune(obsoletePath, configuration);
+                changed |= TryDeleteFileAndPrune(obsoletePath, configuration);
             }
         }
+
+        return changed;
     }
 
-    private void WriteDesiredStrmFiles(TorBoxSyncState state, PluginConfiguration configuration)
+    private bool WriteDesiredStrmFiles(TorBoxSyncState state, PluginConfiguration configuration)
     {
         var baseUrl = configuration.JellyfinPublicBaseUrl?.TrimEnd('/');
         if (string.IsNullOrWhiteSpace(baseUrl))
@@ -330,6 +346,7 @@ public sealed class TorBoxSyncManager
         }
 
         var secret = configuration.PlaySecret;
+        var changed = false;
 
         foreach (var record in state.ManagedFiles.Where(i => !i.IsTombstoned))
         {
@@ -340,14 +357,24 @@ public sealed class TorBoxSyncManager
             }
 
             var strmContent = BuildJellyfinPlayUrl(baseUrl, secret, record);
+            var contentHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(strmContent)));
 
             Directory.CreateDirectory(Path.GetDirectoryName(record.StrmPath)!);
 
-            if (File.Exists(record.StrmPath) && File.ReadAllText(record.StrmPath) == strmContent)
+            if (File.Exists(record.StrmPath)
+                && (string.Equals(record.StrmContentHash, contentHash, StringComparison.Ordinal)
+                    || File.ReadAllText(record.StrmPath) == strmContent))
+            {
+                record.StrmContentHash = contentHash;
                 continue;
+            }
 
             File.WriteAllText(record.StrmPath, strmContent);
+            record.StrmContentHash = contentHash;
+            changed = true;
         }
+
+        return changed;
     }
 
     private static string BuildJellyfinPlayUrl(string jellyfinBase, string secret, ManagedFileRecord record)
@@ -377,13 +404,14 @@ public sealed class TorBoxSyncManager
         return true;
     }
 
-    private void CleanupUnmanagedStrmFiles(TorBoxSyncState state, PluginConfiguration configuration)
+    private bool CleanupUnmanagedStrmFiles(TorBoxSyncState state, PluginConfiguration configuration)
     {
         if (!configuration.RemoveUnmanagedStrmFiles || !Directory.Exists(configuration.LibraryRootPath))
         {
-            return;
+            return false;
         }
 
+        var changed = false;
         var desired = state.ManagedFiles
             .Where(i => !i.IsTombstoned)
             .Select(i => StrmPathBuilder.NormalizePath(i.StrmPath))
@@ -394,15 +422,29 @@ public sealed class TorBoxSyncManager
             var normalizedPath = StrmPathBuilder.NormalizePath(strmPath);
             if (!desired.Contains(normalizedPath))
             {
-                TryDeleteFileAndPrune(strmPath, configuration);
+                changed |= TryDeleteFileAndPrune(strmPath, configuration);
             }
         }
 
-        // Remove any .nfo sidecars left over from a previous plugin version.
-        foreach (var nfoPath in Directory.EnumerateFiles(configuration.LibraryRootPath, "*.nfo", SearchOption.AllDirectories))
+        if (!state.LegacyNfoCleanupCompleted)
         {
-            try { File.Delete(nfoPath); } catch { /* best effort */ }
+            foreach (var nfoPath in Directory.EnumerateFiles(configuration.LibraryRootPath, "*.nfo", SearchOption.AllDirectories))
+            {
+                try
+                {
+                    File.Delete(nfoPath);
+                    changed = true;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogDebug(ex, "Unable to delete legacy NFO {Path}", nfoPath);
+                }
+            }
+
+            state.LegacyNfoCleanupCompleted = true;
         }
+
+        return changed;
     }
 
     private void TombstoneMissingLocalFiles(TorBoxSyncState state, PluginConfiguration configuration, DateTimeOffset now)
@@ -423,7 +465,7 @@ public sealed class TorBoxSyncManager
         }
     }
 
-    private void TombstoneRemoteMissingFiles(
+    private bool TombstoneRemoteMissingFiles(
         TorBoxSyncState state,
         IReadOnlyList<TorBoxFileCandidate> candidates,
         IReadOnlySet<string> unavailableRemoteItemKeys,
@@ -437,6 +479,7 @@ public sealed class TorBoxSyncManager
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         var graceSyncs = Math.Max(1, configuration.RemoteMissingGraceSyncs);
+        var changed = false;
         foreach (var record in state.ManagedFiles.Where(i => !i.IsTombstoned && enabledTypeSet.Contains(i.TorBoxType)))
         {
             if (currentRemoteKeys.Contains(record.Key))
@@ -468,13 +511,15 @@ public sealed class TorBoxSyncManager
             record.TombstonedAtUtc = now;
             record.TombstoneReason = "remote-missing";
             record.DeletedFromTorBoxAtUtc = now;
-            TryDeleteFileAndPrune(record.StrmPath, configuration);
+            changed |= TryDeleteFileAndPrune(record.StrmPath, configuration);
             _logger.LogInformation(
                 "Tombstoned remote-missing TorBox file {Type}:{ItemId}:{FileId}",
                 record.TorBoxType,
                 record.TorBoxItemId,
                 record.TorBoxFileId);
         }
+
+        return changed;
     }
 
     private async Task DeleteFullyTombstonedTorBoxItemsAsync(
@@ -550,13 +595,15 @@ public sealed class TorBoxSyncManager
         }
     }
 
-    private void TryDeleteFileAndPrune(string path, PluginConfiguration configuration)
+    private bool TryDeleteFileAndPrune(string path, PluginConfiguration configuration)
     {
+        var deleted = false;
         try
         {
             if (File.Exists(path))
             {
                 File.Delete(path);
+                deleted = true;
             }
 
             PruneEmptyParentDirectories(path, configuration.LibraryRootPath);
@@ -566,6 +613,8 @@ public sealed class TorBoxSyncManager
             _logger.LogDebug(ex, "Unable to delete STRM or prune empty folders for {Path}", path);
             // The next sync pass will retry cleanup.
         }
+
+        return deleted;
     }
 
     private static void PruneEmptyParentDirectories(string filePath, string libraryRootPath)
