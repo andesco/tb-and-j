@@ -60,9 +60,10 @@ public sealed class TorBoxSyncManager
             var candidates = new List<TorBoxFileCandidate>();
             var observedRemoteItemKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var unavailableRemoteItemKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var type in enabledTypes)
+            var snapshots = await Task.WhenAll(enabledTypes.Select(type =>
+                _client.GetManagedVideoFilesAsync(type, configuration, cancellationToken))).ConfigureAwait(false);
+            foreach (var snapshot in snapshots)
             {
-                var snapshot = await _client.GetManagedVideoFilesAsync(type, configuration, cancellationToken).ConfigureAwait(false);
                 candidates.AddRange(snapshot.Candidates);
                 observedRemoteItemKeys.UnionWith(snapshot.ObservedItemKeys);
                 unavailableRemoteItemKeys.UnionWith(snapshot.UnavailableItemKeys);
@@ -89,6 +90,7 @@ public sealed class TorBoxSyncManager
             progress?.Report(85);
 
             await DeleteFullyTombstonedTorBoxItemsAsync(state, configuration, observedRemoteItemKeys, cancellationToken).ConfigureAwait(false);
+            PruneTerminalState(state, configuration, now);
             state.LastSyncCompletedUtc = DateTimeOffset.UtcNow;
             await _stateStore.SaveAsync(state, cancellationToken).ConfigureAwait(false);
             progress?.Report(100);
@@ -202,17 +204,43 @@ public sealed class TorBoxSyncManager
             // than the series premiere, which would produce the wrong folder name.
             var mainFiles = group.Where(c => !IsNonCanonicalPath(c.Path));
 
-            var years = mainFiles
+            var earliestYear = mainFiles
                 .SelectMany(c => new[] { c.FileName, c.Path, c.ItemName })
                 .Select(StrmPathBuilder.ExtractFirstYear)
                 .Where(y => y.HasValue)
                 .Select(y => y!.Value)
-                .Order()
-                .ToList();
+                .DefaultIfEmpty()
+                .Min();
 
-            result[group.Key] = years.Count > 0 ? years[0] : null;
+            result[group.Key] = earliestYear == 0 ? null : earliestYear;
         }
         return result;
+    }
+
+    private void PruneTerminalState(TorBoxSyncState state, PluginConfiguration configuration, DateTimeOffset now)
+    {
+        var retentionDays = Math.Max(1, configuration.StateRetentionDays);
+        var cutoff = now.AddDays(-retentionDays);
+        var removedManagedFiles = state.ManagedFiles.RemoveAll(record =>
+            record.IsTombstoned
+            && record.DeletedFromTorBoxAtUtc.HasValue
+            && record.DeletedFromTorBoxAtUtc.Value < cutoff);
+        var activeDeletionKeys = state.ManagedFiles
+            .Select(record => TorBoxDeletionRecord.BuildKey(record.TorBoxType, record.TorBoxItemId))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var removedDeletions = state.TorBoxDeletions.RemoveAll(deletion =>
+            deletion.SucceededAtUtc.HasValue
+            && deletion.SucceededAtUtc.Value < cutoff
+            && !activeDeletionKeys.Contains(deletion.Key));
+
+        if (removedManagedFiles > 0 || removedDeletions > 0)
+        {
+            _logger.LogInformation(
+                "Pruned {ManagedCount} terminal managed-file records and {DeletionCount} completed deletion records older than {RetentionDays} days",
+                removedManagedFiles,
+                removedDeletions,
+                retentionDays);
+        }
     }
 
     private static bool IsNonCanonicalPath(string path)

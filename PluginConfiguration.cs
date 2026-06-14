@@ -40,6 +40,8 @@ public sealed class PluginConfiguration : BasePluginConfiguration
 
     public int RemoteMissingGraceSyncs { get; set; } = 2;
 
+    public int StateRetentionDays { get; set; } = 90;
+
     public int SyncIntervalMinutes { get; set; } = 15;
 
     public string[] AllowedVideoExtensions { get; set; } =

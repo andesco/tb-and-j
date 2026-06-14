@@ -39,6 +39,8 @@ Edit the plugin configuration XML at:
 | `SyncUsenet` | `true` | Include Usenet downloads |
 | `SyncWebDownloads` | `true` | Include web downloads |
 | `SyncIntervalMinutes` | `15` | How often to sync |
+| `RemoteMissingGraceSyncs` | `2` | Consecutive complete snapshots that must miss a file before its STRM is removed |
+| `StateRetentionDays` | `90` | Retain terminal tombstone and completed deletion records for this many days |
 | `DeleteTorBoxItemWhenAllManagedFilesTombstoned` | `false` | Delete a TorBox download when all its media files are removed from Jellyfin |
 | `PlaySecret` | *(auto-generated)* | Random secret appended to play URLs as `?s=`. Auto-generated on first sync. Clear to rotate. |
 
