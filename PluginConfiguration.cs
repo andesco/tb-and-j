@@ -20,7 +20,7 @@ public sealed class PluginConfiguration : BasePluginConfiguration
     /// </summary>
     public string PlaySecret { get; set; } = string.Empty;
 
-    public string LibraryRootPath { get; set; } = "/var/lib/jellyfin/data/torbox-sync/library";
+    public string LibraryRootPath { get; set; } = string.Empty;
 
     public bool AutoCreateJellyfinLibraries { get; set; } = true;
 

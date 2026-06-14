@@ -35,7 +35,7 @@ The plugin configuration is stored by Jellyfin in:
 
 | Field | Default | Description |
 |---|---|---|
-| `LibraryRootPath` | `/var/lib/jellyfin/data/torbox-sync/library` | Where STRM files are written |
+| `LibraryRootPath` | `{Jellyfin data path}/torbox-sync/library` | Where STRM files are written; resolved from Jellyfin's configured data path on first startup |
 | `MovieLibraryName` | `TorBox Movies` | Jellyfin library name for movies |
 | `SeriesLibraryName` | `TorBox Series` | Jellyfin library name for TV shows |
 | `AutoCreateJellyfinLibraries` | `true` | Creates and registers the libraries on first sync |

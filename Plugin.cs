@@ -17,6 +17,12 @@ public sealed class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
         : base(applicationPaths, xmlSerializer)
     {
         Instance = this;
+        var libraryRootPath = ResolveLibraryRootPath(Configuration.LibraryRootPath, applicationPaths.DataPath);
+        if (!string.Equals(Configuration.LibraryRootPath, libraryRootPath, StringComparison.Ordinal))
+        {
+            Configuration.LibraryRootPath = libraryRootPath;
+            SaveConfiguration();
+        }
     }
 
     public override string Name => PluginName;
@@ -24,6 +30,14 @@ public sealed class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
     public override Guid Id => PluginId;
 
     public override string Description => "Synchronizes TorBox media into a Jellyfin-managed STRM library.";
+
+    internal static string GetDefaultLibraryRootPath(string dataPath)
+        => Path.Combine(dataPath, "torbox-sync", "library");
+
+    internal static string ResolveLibraryRootPath(string configuredPath, string dataPath)
+        => string.IsNullOrWhiteSpace(configuredPath)
+            ? GetDefaultLibraryRootPath(dataPath)
+            : configuredPath;
 
     public IEnumerable<PluginPageInfo> GetPages()
         =>

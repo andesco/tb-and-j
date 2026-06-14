@@ -14,6 +14,26 @@ public sealed class TorBoxSyncManagerTests
     }
 
     [Fact]
+    public void GetDefaultLibraryRootPath_UsesJellyfinDataPath()
+    {
+        var dataPath = Path.Combine(Path.GetTempPath(), "jellyfin-data");
+
+        var result = Plugin.GetDefaultLibraryRootPath(dataPath);
+
+        Assert.Equal(Path.Combine(dataPath, "torbox-sync", "library"), result);
+    }
+
+    [Fact]
+    public void ResolveLibraryRootPath_PreservesExistingConfiguration()
+    {
+        var configuredPath = Path.Combine(Path.GetTempPath(), "existing-library");
+
+        var result = Plugin.ResolveLibraryRootPath(configuredPath, "/different/jellyfin-data");
+
+        Assert.Equal(configuredPath, result);
+    }
+
+    [Fact]
     public void EnsureUniqueStrmPaths_DisambiguatesCollidingRecords()
     {
         var root = Path.Combine(Path.GetTempPath(), "torbox-sync-tests");
