@@ -9,6 +9,14 @@
     "imageUrl": "https://raw.githubusercontent.com/andesco/tb-and-j/main/artwork/tb-and-j-plugin-banner-800x450.png",
     "versions": [
       {
+        "version": "0.2.1.0",
+        "changelog": "Add a Jellyfin dashboard configuration page for the TorBox API key, playback URL, library, sync, cleanup, and deletion settings.",
+        "targetAbi": "10.11.10.0",
+        "sourceUrl": "https://raw.githubusercontent.com/andesco/tb-and-j/main/dist/tb-and-j_0.2.1.0.zip",
+        "checksum": "4399df6ba5a5ae1ee68db3f1b070b20c",
+        "timestamp": "2026-06-14T19:26:51Z"
+      },
+      {
         "version": "0.2.0.0",
         "changelog": "Safer remote reconciliation, collision-free STRM paths, server-side CDN URL resolution, batched deletion handling, change-aware library scans, concurrent TorBox fetches, terminal-state retention, and focused safety tests.",
         "targetAbi": "10.11.10.0",
