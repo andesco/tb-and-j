@@ -110,10 +110,21 @@ public sealed class TorBoxSyncManager
     }
 
     public async Task TombstonePathAsync(string path, string reason, CancellationToken cancellationToken)
+        => await TombstonePathsAsync([path], reason, cancellationToken).ConfigureAwait(false);
+
+    public async Task TombstonePathsAsync(
+        IReadOnlyCollection<string> paths,
+        string reason,
+        CancellationToken cancellationToken)
     {
         var configuration = Plugin.Instance.Configuration;
-        var normalizedPath = StrmPathBuilder.NormalizePath(path);
-        if (!StrmPathBuilder.IsUnderRoot(normalizedPath, configuration.LibraryRootPath))
+        var normalizedPaths = paths
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Select(StrmPathBuilder.NormalizePath)
+            .Where(path => StrmPathBuilder.IsUnderRoot(path, configuration.LibraryRootPath))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (normalizedPaths.Length == 0)
         {
             return;
         }
@@ -128,8 +139,9 @@ public sealed class TorBoxSyncManager
             foreach (var record in state.ManagedFiles.Where(i => !i.IsTombstoned))
             {
                 var recordPath = StrmPathBuilder.NormalizePath(record.StrmPath);
-                if (string.Equals(recordPath, normalizedPath, StringComparison.OrdinalIgnoreCase)
-                    || recordPath.StartsWith(normalizedPath + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+                if (normalizedPaths.Any(path =>
+                        string.Equals(recordPath, path, StringComparison.OrdinalIgnoreCase)
+                        || recordPath.StartsWith(path + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)))
                 {
                     record.TombstonedAtUtc = now;
                     record.TombstoneReason = reason;
