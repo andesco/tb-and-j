@@ -14,6 +14,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Remove="tests/**/*.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Reference Include="MediaBrowser.Common" HintPath="/usr/lib/jellyfin/bin/MediaBrowser.Common.dll" Private="false" />
     <Reference Include="MediaBrowser.Controller" HintPath="/usr/lib/jellyfin/bin/MediaBrowser.Controller.dll" Private="false" />
     <Reference Include="MediaBrowser.Model" HintPath="/usr/lib/jellyfin/bin/MediaBrowser.Model.dll" Private="false" />

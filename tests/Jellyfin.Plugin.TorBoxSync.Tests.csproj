@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.1">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Jellyfin.Plugin.TorBoxSync.csproj" />
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <Reference Include="MediaBrowser.Common" HintPath="/usr/lib/jellyfin/bin/MediaBrowser.Common.dll" />
+    <Reference Include="MediaBrowser.Controller" HintPath="/usr/lib/jellyfin/bin/MediaBrowser.Controller.dll" />
+    <Reference Include="MediaBrowser.Model" HintPath="/usr/lib/jellyfin/bin/MediaBrowser.Model.dll" />
+    <Reference Include="Jellyfin.Api" HintPath="/usr/lib/jellyfin/bin/Jellyfin.Api.dll" />
+    <Reference Include="Jellyfin.Data" HintPath="/usr/lib/jellyfin/bin/Jellyfin.Data.dll" />
+  </ItemGroup>
+</Project>

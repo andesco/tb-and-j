@@ -323,7 +323,7 @@ public sealed class TorBoxSyncManager
         return obsoleteManagedPaths;
     }
 
-    private static void EnsureUniqueStrmPaths(
+    internal static void EnsureUniqueStrmPaths(
         IReadOnlyList<ManagedFileRecord> records,
         IReadOnlySet<string> occupiedPaths,
         string libraryRootPath)
