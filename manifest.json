@@ -8,6 +8,14 @@
     "owner": "Local",
     "versions": [
       {
+        "version": "0.2.0.0",
+        "changelog": "Safer remote reconciliation, collision-free STRM paths, server-side CDN URL resolution, batched deletion handling, change-aware library scans, concurrent TorBox fetches, terminal-state retention, and focused safety tests.",
+        "targetAbi": "10.11.10.0",
+        "sourceUrl": "https://raw.githubusercontent.com/andesco/tb-and-j/main/dist/tb-and-j_0.2.0.0.zip",
+        "checksum": "fe167e1dafc87b1acac8c8e95917d4d3",
+        "timestamp": "2026-06-14T15:35:31Z"
+      },
+      {
         "version": "0.1.0.0",
         "changelog": "Initial TB&J TorBox STRM sync and managed tombstone deletion prototype.",
         "targetAbi": "10.11.10.0",
