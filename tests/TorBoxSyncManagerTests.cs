@@ -6,6 +6,14 @@ namespace Jellyfin.Plugin.TorBoxSync.Tests;
 public sealed class TorBoxSyncManagerTests
 {
     [Fact]
+    public void PluginAssembly_ContainsConfigurationPage()
+    {
+        Assert.Contains(
+            "Jellyfin.Plugin.TorBoxSync.Configuration.configPage.html",
+            typeof(Plugin).Assembly.GetManifestResourceNames());
+    }
+
+    [Fact]
     public void EnsureUniqueStrmPaths_DisambiguatesCollidingRecords()
     {
         var root = Path.Combine(Path.GetTempPath(), "torbox-sync-tests");

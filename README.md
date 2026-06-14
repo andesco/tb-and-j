@@ -16,11 +16,13 @@ Save the repository, open the plugin catalogue, install **TB&J**, and restart Je
 
 ## Setup
 
-Edit the plugin configuration XML at:
+After installing and restarting Jellyfin, open **Dashboard → Plugins → TB&J → Settings**.
 
-```
-/var/lib/jellyfin/plugins/configurations/Jellyfin.Plugin.TorBoxSync.xml
-```
+Enter your TorBox API key and Jellyfin public base URL, review the library and sync settings, then select **Save**.
+
+The plugin configuration is stored by Jellyfin in:
+
+`/var/lib/jellyfin/plugins/configurations/Jellyfin.Plugin.TorBoxSync.xml`
 
 ### Required
 
@@ -66,7 +68,9 @@ Each STRM contains a URL like:
 https://jelly.example.com/torboxsync/play/torrents/12345/1/Movie.Title.2024?s=<secret>
 ```
 
-When a client plays the item, Jellyfin hits this endpoint, validates the secret, and returns a `302` redirect to the TorBox CDN. Your server handles no video data. The TorBox API key is never sent to the client.
+When a client plays the item, Jellyfin hits this endpoint, validates the secret, resolves the TorBox CDN URL, and returns a `302` redirect. Your server handles no video data.
+
+TorBox includes the account API key in its direct-download CDN URL, so trusted playback clients can observe that key. This is an inherent tradeoff of direct client-to-TorBox playback without proxying media through Jellyfin.
 
 Sync is skipped when `JellyfinPublicBaseUrl` is not configured. The plugin never writes raw TorBox API URLs containing the API key into STRM files or persistent sync state.
 

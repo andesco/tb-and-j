@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>TB&amp;J</title>
+</head>
+<body>
+    <div id="TorBoxSyncConfigPage" data-role="page" class="page type-interior pluginConfigurationPage" data-require="emby-input,emby-button,emby-checkbox">
+        <div data-role="content">
+            <div class="content-primary">
+                <form id="TorBoxSyncConfigForm">
+                    <h2>Connection</h2>
+                    <div class="inputContainer">
+                        <label class="inputLabel inputLabelUnfocused" for="TorBoxApiKey">TorBox API key</label>
+                        <input id="TorBoxApiKey" type="password" is="emby-input" autocomplete="off" />
+                        <div class="fieldDescription">Stored in Jellyfin's plugin configuration and used to access your TorBox account.</div>
+                    </div>
+                    <div class="inputContainer">
+                        <label class="inputLabel inputLabelUnfocused" for="JellyfinPublicBaseUrl">Jellyfin public base URL</label>
+                        <input id="JellyfinPublicBaseUrl" type="url" is="emby-input" placeholder="https://jelly.example.com" />
+                        <div class="fieldDescription">Required. Used to create playback URLs in generated STRM files.</div>
+                    </div>
+
+                    <h2>Library</h2>
+                    <div class="inputContainer">
+                        <label class="inputLabel inputLabelUnfocused" for="LibraryRootPath">Library root path</label>
+                        <input id="LibraryRootPath" type="text" is="emby-input" />
+                    </div>
+                    <div class="inputContainer">
+                        <label class="inputLabel inputLabelUnfocused" for="MovieLibraryName">Movie library name</label>
+                        <input id="MovieLibraryName" type="text" is="emby-input" />
+                    </div>
+                    <div class="inputContainer">
+                        <label class="inputLabel inputLabelUnfocused" for="SeriesLibraryName">Series library name</label>
+                        <input id="SeriesLibraryName" type="text" is="emby-input" />
+                    </div>
+                    <div class="checkboxContainer checkboxContainer-withDescription">
+                        <label class="emby-checkbox-label">
+                            <input id="AutoCreateJellyfinLibraries" type="checkbox" is="emby-checkbox" />
+                            <span>Automatically create Jellyfin libraries</span>
+                        </label>
+                    </div>
+
+                    <h2>Content Sources</h2>
+                    <div class="checkboxContainer">
+                        <label class="emby-checkbox-label"><input id="SyncTorrents" type="checkbox" is="emby-checkbox" /><span>Sync torrents</span></label>
+                    </div>
+                    <div class="checkboxContainer">
+                        <label class="emby-checkbox-label"><input id="SyncUsenet" type="checkbox" is="emby-checkbox" /><span>Sync Usenet downloads</span></label>
+                    </div>
+                    <div class="checkboxContainer">
+                        <label class="emby-checkbox-label"><input id="SyncWebDownloads" type="checkbox" is="emby-checkbox" /><span>Sync web downloads</span></label>
+                    </div>
+                    <div class="inputContainer">
+                        <label class="inputLabel inputLabelUnfocused" for="AllowedVideoExtensions">Allowed video extensions</label>
+                        <input id="AllowedVideoExtensions" type="text" is="emby-input" placeholder=".mkv, .mp4, .avi" />
+                        <div class="fieldDescription">Comma-separated extensions used when TorBox does not report a video MIME type.</div>
+                    </div>
+
+                    <h2>Sync and Cleanup</h2>
+                    <div class="inputContainer">
+                        <label class="inputLabel inputLabelUnfocused" for="SyncIntervalMinutes">Sync interval in minutes</label>
+                        <input id="SyncIntervalMinutes" type="number" is="emby-input" min="5" step="1" />
+                    </div>
+                    <div class="inputContainer">
+                        <label class="inputLabel inputLabelUnfocused" for="RemoteMissingGraceSyncs">Remote-missing grace syncs</label>
+                        <input id="RemoteMissingGraceSyncs" type="number" is="emby-input" min="1" step="1" />
+                        <div class="fieldDescription">Complete syncs that must miss a remote file before its STRM is removed.</div>
+                    </div>
+                    <div class="inputContainer">
+                        <label class="inputLabel inputLabelUnfocused" for="StateRetentionDays">Terminal-state retention in days</label>
+                        <input id="StateRetentionDays" type="number" is="emby-input" min="1" step="1" />
+                    </div>
+                    <div class="checkboxContainer checkboxContainer-withDescription">
+                        <label class="emby-checkbox-label">
+                            <input id="RemoveUnmanagedStrmFiles" type="checkbox" is="emby-checkbox" />
+                            <span>Remove unmanaged STRM files under the library root</span>
+                        </label>
+                    </div>
+
+                    <h2>Destructive Actions</h2>
+                    <div class="checkboxContainer checkboxContainer-withDescription">
+                        <label class="emby-checkbox-label">
+                            <input id="DeleteTorBoxItemWhenAllManagedFilesTombstoned" type="checkbox" is="emby-checkbox" />
+                            <span>Delete a TorBox download when all managed files are tombstoned</span>
+                        </label>
+                        <div class="fieldDescription">Disabled by default. Enabling this allows Jellyfin deletions to remove downloads from TorBox.</div>
+                    </div>
+
+                    <div>
+                        <button is="emby-button" type="submit" class="raised button-submit block emby-button">
+                            <span>Save</span>
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        <script type="text/javascript">
+            var TorBoxSyncConfig = {
+                pluginUniqueId: 'a2f4e2bb-7dcb-49ea-8bbf-f8b9d77f1fb5',
+                fields: [
+                    'TorBoxApiKey',
+                    'JellyfinPublicBaseUrl',
+                    'LibraryRootPath',
+                    'MovieLibraryName',
+                    'SeriesLibraryName'
+                ],
+                checkboxes: [
+                    'AutoCreateJellyfinLibraries',
+                    'SyncTorrents',
+                    'SyncUsenet',
+                    'SyncWebDownloads',
+                    'RemoveUnmanagedStrmFiles',
+                    'DeleteTorBoxItemWhenAllManagedFilesTombstoned'
+                ],
+                numbers: [
+                    'SyncIntervalMinutes',
+                    'RemoteMissingGraceSyncs',
+                    'StateRetentionDays'
+                ],
+                parseNumber: function (field, minimum) {
+                    var value = Number.parseInt(document.querySelector('#' + field).value, 10);
+                    return Number.isFinite(value) ? Math.max(minimum, value) : minimum;
+                }
+            };
+
+            document.querySelector('#TorBoxSyncConfigPage').addEventListener('pageshow', function () {
+                Dashboard.showLoadingMsg();
+                ApiClient.getPluginConfiguration(TorBoxSyncConfig.pluginUniqueId).then(function (config) {
+                    TorBoxSyncConfig.fields.forEach(function (field) {
+                        document.querySelector('#' + field).value = config[field] || '';
+                    });
+                    TorBoxSyncConfig.checkboxes.forEach(function (field) {
+                        document.querySelector('#' + field).checked = !!config[field];
+                    });
+                    TorBoxSyncConfig.numbers.forEach(function (field) {
+                        document.querySelector('#' + field).value = config[field];
+                    });
+                    document.querySelector('#AllowedVideoExtensions').value = (config.AllowedVideoExtensions || []).join(', ');
+                    Dashboard.hideLoadingMsg();
+                });
+            });
+
+            document.querySelector('#TorBoxSyncConfigForm').addEventListener('submit', function (event) {
+                Dashboard.showLoadingMsg();
+                ApiClient.getPluginConfiguration(TorBoxSyncConfig.pluginUniqueId).then(function (config) {
+                    TorBoxSyncConfig.fields.forEach(function (field) {
+                        config[field] = document.querySelector('#' + field).value.trim();
+                    });
+                    TorBoxSyncConfig.checkboxes.forEach(function (field) {
+                        config[field] = document.querySelector('#' + field).checked;
+                    });
+                    config.SyncIntervalMinutes = TorBoxSyncConfig.parseNumber('SyncIntervalMinutes', 5);
+                    config.RemoteMissingGraceSyncs = TorBoxSyncConfig.parseNumber('RemoteMissingGraceSyncs', 1);
+                    config.StateRetentionDays = TorBoxSyncConfig.parseNumber('StateRetentionDays', 1);
+                    config.AllowedVideoExtensions = document.querySelector('#AllowedVideoExtensions').value
+                        .split(',')
+                        .map(function (extension) { return extension.trim().toLowerCase(); })
+                        .filter(function (extension) { return extension.length > 0; })
+                        .map(function (extension) { return extension.startsWith('.') ? extension : '.' + extension; });
+
+                    ApiClient.updatePluginConfiguration(TorBoxSyncConfig.pluginUniqueId, config).then(function (result) {
+                        Dashboard.processPluginConfigurationUpdateResult(result);
+                    });
+                });
+                event.preventDefault();
+                return false;
+            });
+        </script>
+    </div>
+</body>
+</html>

@@ -1,10 +1,11 @@
 using MediaBrowser.Common.Configuration;
 using MediaBrowser.Common.Plugins;
+using MediaBrowser.Model.Plugins;
 using MediaBrowser.Model.Serialization;
 
 namespace Jellyfin.Plugin.TorBoxSync;
 
-public sealed class Plugin : BasePlugin<PluginConfiguration>
+public sealed class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
 {
     public const string PluginName = "TB&J";
 
@@ -23,4 +24,15 @@ public sealed class Plugin : BasePlugin<PluginConfiguration>
     public override Guid Id => PluginId;
 
     public override string Description => "Synchronizes TorBox media into a Jellyfin-managed STRM library.";
+
+    public IEnumerable<PluginPageInfo> GetPages()
+        =>
+        [
+            new PluginPageInfo
+            {
+                Name = Name,
+                DisplayName = Name,
+                EmbeddedResourcePath = $"{GetType().Namespace}.Configuration.configPage.html"
+            }
+        ];
 }
