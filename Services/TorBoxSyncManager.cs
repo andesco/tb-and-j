@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using Jellyfin.Plugin.TorBoxSync.Models;
 using MediaBrowser.Controller.Library;
 using Microsoft.Extensions.Logging;
@@ -61,11 +63,12 @@ public sealed class TorBoxSyncManager
             }
 
             progress?.Report(45);
-            UpsertCandidates(state, candidates, configuration, now);
+            var obsoleteManagedPaths = UpsertCandidates(state, candidates, configuration, now);
             TombstoneRemoteMissingFiles(state, candidates, unavailableRemoteItemKeys, configuration, now, enabledTypes);
             progress?.Report(70);
 
             WriteDesiredStrmFiles(state, configuration);
+            DeleteObsoleteManagedPaths(state, obsoleteManagedPaths, configuration);
             CleanupUnmanagedStrmFiles(state, configuration);
             progress?.Report(85);
 
@@ -193,7 +196,7 @@ public sealed class TorBoxSyncManager
         return false;
     }
 
-    private void UpsertCandidates(
+    private IReadOnlyList<string> UpsertCandidates(
         TorBoxSyncState state,
         IReadOnlyList<TorBoxFileCandidate> candidates,
         PluginConfiguration configuration,
@@ -205,14 +208,35 @@ public sealed class TorBoxSyncManager
         // but individual episode files may be dated).
         var earliestYearByItemKey = BuildEarliestYearMap(candidates);
 
+        var newRecords = candidates
+            .Select(candidate =>
+            {
+                var itemKey = $"{candidate.TorBoxType}:{candidate.ItemId}";
+                earliestYearByItemKey.TryGetValue(itemKey, out var fallbackYear);
+                return StrmPathBuilder.ToManagedRecord(candidate, configuration.LibraryRootPath, now, fallbackYear);
+            })
+            .ToList();
+        var newRecordKeys = newRecords.Select(record => record.Key).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var occupiedPaths = state.ManagedFiles
+            .Where(record => !record.IsTombstoned && !newRecordKeys.Contains(record.Key))
+            .Select(record => StrmPathBuilder.NormalizePath(record.StrmPath))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        EnsureUniqueStrmPaths(newRecords, occupiedPaths, configuration.LibraryRootPath);
+
+        var obsoleteManagedPaths = new List<string>();
         var existingByKey = state.ManagedFiles.ToDictionary(i => i.Key, StringComparer.OrdinalIgnoreCase);
-        foreach (var candidate in candidates)
+        foreach (var newRecord in newRecords)
         {
-            var itemKey = $"{candidate.TorBoxType}:{candidate.ItemId}";
-            earliestYearByItemKey.TryGetValue(itemKey, out var fallbackYear);
-            var newRecord = StrmPathBuilder.ToManagedRecord(candidate, configuration.LibraryRootPath, now, fallbackYear);
             if (existingByKey.TryGetValue(newRecord.Key, out var existing))
             {
+                if (!string.Equals(
+                        StrmPathBuilder.NormalizePath(existing.StrmPath),
+                        StrmPathBuilder.NormalizePath(newRecord.StrmPath),
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    obsoleteManagedPaths.Add(existing.StrmPath);
+                }
+
                 existing.TorBoxItemName = newRecord.TorBoxItemName;
                 existing.TorBoxFileName = newRecord.TorBoxFileName;
                 existing.TorBoxPath = newRecord.TorBoxPath;
@@ -236,6 +260,51 @@ public sealed class TorBoxSyncManager
             }
 
             state.ManagedFiles.Add(newRecord);
+        }
+
+        return obsoleteManagedPaths;
+    }
+
+    private static void EnsureUniqueStrmPaths(
+        IReadOnlyList<ManagedFileRecord> records,
+        IReadOnlySet<string> occupiedPaths,
+        string libraryRootPath)
+    {
+        var pathsToDisambiguate = records
+            .GroupBy(record => StrmPathBuilder.NormalizePath(record.StrmPath), StringComparer.OrdinalIgnoreCase)
+            .Where(group => group.Count() > 1 || occupiedPaths.Contains(group.Key))
+            .SelectMany(group => group)
+            .ToList();
+        foreach (var record in pathsToDisambiguate)
+        {
+            var suffix = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(record.Key)))[..10].ToLowerInvariant();
+            var directory = Path.GetDirectoryName(record.RelativeStrmPath)!;
+            var fileName = Path.GetFileNameWithoutExtension(record.RelativeStrmPath);
+            record.RelativeStrmPath = Path.Combine(directory, $"{fileName} [tb-{suffix}].strm");
+            record.StrmPath = Path.GetFullPath(Path.Combine(libraryRootPath, record.RelativeStrmPath));
+        }
+    }
+
+    private void DeleteObsoleteManagedPaths(
+        TorBoxSyncState state,
+        IReadOnlyList<string> obsoleteManagedPaths,
+        PluginConfiguration configuration)
+    {
+        if (obsoleteManagedPaths.Count == 0)
+        {
+            return;
+        }
+
+        var desiredPaths = state.ManagedFiles
+            .Where(record => !record.IsTombstoned)
+            .Select(record => StrmPathBuilder.NormalizePath(record.StrmPath))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var obsoletePath in obsoleteManagedPaths.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            if (!desiredPaths.Contains(StrmPathBuilder.NormalizePath(obsoletePath)))
+            {
+                TryDeleteFileAndPrune(obsoletePath, configuration);
+            }
         }
     }
 
