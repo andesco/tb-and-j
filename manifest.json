@@ -6,6 +6,7 @@
     "description": "Synchronizes TorBox media into a Jellyfin-managed STRM library and deletes TorBox downloads only after all managed media files for that download are tombstoned.",
     "overview": "TorBox STRM sync with Jellyfin-driven tombstones.",
     "owner": "Local",
+    "imageUrl": "https://raw.githubusercontent.com/andesco/tb-and-j/main/artwork/tb-and-j-plugin-banner-800x450.png",
     "versions": [
       {
         "version": "0.2.0.0",
