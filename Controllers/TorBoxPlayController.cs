@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
@@ -15,10 +16,12 @@ public sealed class TorBoxPlayController : ControllerBase
         { "webdl",    "web_id"     },
     };
 
+    private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<TorBoxPlayController> _logger;
 
-    public TorBoxPlayController(ILogger<TorBoxPlayController> logger)
+    public TorBoxPlayController(IHttpClientFactory httpClientFactory, ILogger<TorBoxPlayController> logger)
     {
+        _httpClientFactory = httpClientFactory;
         _logger = logger;
     }
 
@@ -33,11 +36,12 @@ public sealed class TorBoxPlayController : ControllerBase
     [ProducesResponseType(StatusCodes.Status302Found)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
-    public IActionResult Play(
+    public async Task<IActionResult> Play(
         string torboxType,
         string itemId,
         string fileId,
-        [FromQuery(Name = "s")] string? secret)
+        [FromQuery(Name = "s")] string? secret,
+        CancellationToken cancellationToken)
     {
         var expectedSecret = Plugin.Instance.Configuration.PlaySecret;
         if (string.IsNullOrWhiteSpace(expectedSecret) || secret != expectedSecret)
@@ -50,14 +54,51 @@ public sealed class TorBoxPlayController : ControllerBase
         if (string.IsNullOrWhiteSpace(apiKey))
             return StatusCode(503, "TorBox API key not configured.");
 
-        var redirectUrl =
+        var resolveUrl =
             $"https://api.torbox.app/v1/api/{torboxType}/requestdl"
             + $"?token={Uri.EscapeDataString(apiKey)}"
             + $"&{idParam}={Uri.EscapeDataString(itemId)}"
-            + $"&file_id={Uri.EscapeDataString(fileId)}"
-            + "&redirect=true";
+            + $"&file_id={Uri.EscapeDataString(fileId)}";
 
-        _logger.LogDebug("TorBoxPlay: {Type}/{Item}/{File}", torboxType, itemId, fileId);
-        return Redirect(redirectUrl);
+        try
+        {
+            var client = _httpClientFactory.CreateClient();
+            using var response = await client.GetAsync(resolveUrl, cancellationToken).ConfigureAwait(false);
+            var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning(
+                    "TorBoxPlay: TorBox returned {StatusCode} for {Type}/{Item}/{File}",
+                    (int)response.StatusCode,
+                    torboxType,
+                    itemId,
+                    fileId);
+                return StatusCode(502, "TorBox did not return a download URL.");
+            }
+
+            using var document = JsonDocument.Parse(body);
+            var cdnUrl = document.RootElement.TryGetProperty("data", out var dataElement)
+                ? dataElement.GetString()
+                : null;
+            if (string.IsNullOrWhiteSpace(cdnUrl)
+                || !Uri.TryCreate(cdnUrl, UriKind.Absolute, out var cdnUri)
+                || !string.Equals(cdnUri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
+            {
+                _logger.LogWarning("TorBoxPlay: no CDN URL returned for {Type}/{Item}/{File}", torboxType, itemId, fileId);
+                return StatusCode(502, "TorBox did not return a download URL.");
+            }
+
+            _logger.LogDebug("TorBoxPlay: {Type}/{Item}/{File} resolved to CDN URL", torboxType, itemId, fileId);
+            return Redirect(cdnUri.ToString());
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "TorBoxPlay: request failed for {Type}/{Item}/{File}", torboxType, itemId, fileId);
+            return StatusCode(502, "Failed to resolve TorBox download URL.");
+        }
     }
 }
