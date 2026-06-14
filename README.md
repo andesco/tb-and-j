@@ -4,13 +4,15 @@ A Jellyfin plugin that syncs your TorBox library into Jellyfin as a native STRM-
 
 ## Install
 
-Add this repository URL in Jellyfin Dashboard → Plugins → Repositories:
+In Jellyfin, open **Dashboard → Plugins → Manage Repositories → New Repository**.
+
+Enter a repository name such as `TB&J`, then use this repository URL:
 
 ```
 https://raw.githubusercontent.com/andesco/tb-and-j/main/manifest.json
 ```
 
-Then install **TB&J** from the catalogue and restart Jellyfin.
+Save the repository, open the plugin catalogue, install **TB&J**, and restart Jellyfin.
 
 ## Setup
 
