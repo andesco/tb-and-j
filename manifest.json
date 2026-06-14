@@ -9,6 +9,14 @@
     "imageUrl": "https://raw.githubusercontent.com/andesco/tb-and-j/main/artwork/tb-and-j-plugin-banner-800x450.png",
     "versions": [
       {
+        "version": "0.2.2.0",
+        "changelog": "Derive the default STRM library root from Jellyfin's configured data path while preserving existing configured paths.",
+        "targetAbi": "10.11.10.0",
+        "sourceUrl": "https://raw.githubusercontent.com/andesco/tb-and-j/main/dist/tb-and-j_0.2.2.0.zip",
+        "checksum": "3ac5eddf0ba96893ed977ebc4f7a85d3",
+        "timestamp": "2026-06-14T20:41:40Z"
+      },
+      {
         "version": "0.2.1.0",
         "changelog": "Add a Jellyfin dashboard configuration page for the TorBox API key, playback URL, library, sync, cleanup, and deletion settings.",
         "targetAbi": "10.11.10.0",
