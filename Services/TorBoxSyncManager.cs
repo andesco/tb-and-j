@@ -50,24 +50,26 @@ public sealed class TorBoxSyncManager
 
             var enabledTypes = GetEnabledTypes(configuration).ToArray();
             var candidates = new List<TorBoxFileCandidate>();
+            var observedRemoteItemKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var unavailableRemoteItemKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var type in enabledTypes)
             {
-                candidates.AddRange(await _client.GetManagedVideoFilesAsync(type, configuration, cancellationToken).ConfigureAwait(false));
+                var snapshot = await _client.GetManagedVideoFilesAsync(type, configuration, cancellationToken).ConfigureAwait(false);
+                candidates.AddRange(snapshot.Candidates);
+                observedRemoteItemKeys.UnionWith(snapshot.ObservedItemKeys);
+                unavailableRemoteItemKeys.UnionWith(snapshot.UnavailableItemKeys);
             }
 
             progress?.Report(45);
             UpsertCandidates(state, candidates, configuration, now);
-            TombstoneRemoteMissingFiles(state, candidates, configuration, now, enabledTypes);
+            TombstoneRemoteMissingFiles(state, candidates, unavailableRemoteItemKeys, configuration, now, enabledTypes);
             progress?.Report(70);
 
             WriteDesiredStrmFiles(state, configuration);
             CleanupUnmanagedStrmFiles(state, configuration);
             progress?.Report(85);
 
-            var currentRemoteItemKeys = candidates
-                .Select(i => TorBoxDeletionRecord.BuildKey(i.TorBoxType, i.ItemId))
-                .ToHashSet(StringComparer.OrdinalIgnoreCase);
-            await DeleteFullyTombstonedTorBoxItemsAsync(state, configuration, currentRemoteItemKeys, cancellationToken).ConfigureAwait(false);
+            await DeleteFullyTombstonedTorBoxItemsAsync(state, configuration, observedRemoteItemKeys, cancellationToken).ConfigureAwait(false);
             state.LastSyncCompletedUtc = DateTimeOffset.UtcNow;
             await _stateStore.SaveAsync(state, cancellationToken).ConfigureAwait(false);
             progress?.Report(100);
@@ -222,6 +224,14 @@ public sealed class TorBoxSyncManager
                 existing.StrmPath = newRecord.StrmPath;
                 existing.DownloadLink = newRecord.DownloadLink;
                 existing.LastSeenUtc = now;
+                existing.ConsecutiveRemoteMisses = 0;
+                if (string.Equals(existing.TombstoneReason, "remote-missing", StringComparison.OrdinalIgnoreCase))
+                {
+                    existing.TombstonedAtUtc = null;
+                    existing.TombstoneReason = string.Empty;
+                    existing.DeletedFromTorBoxAtUtc = null;
+                }
+
                 continue;
             }
 
@@ -346,6 +356,7 @@ public sealed class TorBoxSyncManager
     private void TombstoneRemoteMissingFiles(
         TorBoxSyncState state,
         IReadOnlyList<TorBoxFileCandidate> candidates,
+        IReadOnlySet<string> unavailableRemoteItemKeys,
         PluginConfiguration configuration,
         DateTimeOffset now,
         IReadOnlyCollection<string> enabledTypes)
@@ -355,10 +366,32 @@ public sealed class TorBoxSyncManager
             .Select(i => ManagedFileRecord.BuildKey(i.TorBoxType, i.ItemId, i.FileId))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
+        var graceSyncs = Math.Max(1, configuration.RemoteMissingGraceSyncs);
         foreach (var record in state.ManagedFiles.Where(i => !i.IsTombstoned && enabledTypeSet.Contains(i.TorBoxType)))
         {
             if (currentRemoteKeys.Contains(record.Key))
             {
+                record.ConsecutiveRemoteMisses = 0;
+                continue;
+            }
+
+            var itemKey = TorBoxDeletionRecord.BuildKey(record.TorBoxType, record.TorBoxItemId);
+            if (unavailableRemoteItemKeys.Contains(itemKey))
+            {
+                record.ConsecutiveRemoteMisses = 0;
+                continue;
+            }
+
+            record.ConsecutiveRemoteMisses++;
+            if (record.ConsecutiveRemoteMisses < graceSyncs)
+            {
+                _logger.LogDebug(
+                    "Deferring remote-missing tombstone for {Type}:{ItemId}:{FileId}; miss {MissCount} of {GraceSyncs}",
+                    record.TorBoxType,
+                    record.TorBoxItemId,
+                    record.TorBoxFileId,
+                    record.ConsecutiveRemoteMisses,
+                    graceSyncs);
                 continue;
             }
 

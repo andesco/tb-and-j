@@ -38,6 +38,8 @@ public sealed class PluginConfiguration : BasePluginConfiguration
 
     public bool RemoveUnmanagedStrmFiles { get; set; } = true;
 
+    public int RemoteMissingGraceSyncs { get; set; } = 2;
+
     public int SyncIntervalMinutes { get; set; } = 15;
 
     public string[] AllowedVideoExtensions { get; set; } =

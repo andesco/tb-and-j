@@ -20,12 +20,14 @@ public sealed class TorBoxClient
         _logger = logger;
     }
 
-    public async Task<IReadOnlyList<TorBoxFileCandidate>> GetManagedVideoFilesAsync(
+    public async Task<TorBoxSnapshot> GetManagedVideoFilesAsync(
         string torBoxType,
         PluginConfiguration configuration,
         CancellationToken cancellationToken)
     {
         var files = new List<TorBoxFileCandidate>();
+        var observedItemKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var unavailableItemKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var offset = 0;
         const int limit = 1000;
 
@@ -38,29 +40,32 @@ public sealed class TorBoxClient
 
             if (!document.RootElement.TryGetProperty("data", out var dataElement) || dataElement.ValueKind != JsonValueKind.Array)
             {
-                break;
+                throw new InvalidOperationException($"TorBox {torBoxType} list response did not contain a data array.");
             }
 
             var pageCount = 0;
             foreach (var itemElement in dataElement.EnumerateArray())
             {
                 pageCount++;
-                if (itemElement.TryGetProperty("cached", out var cachedElement)
-                    && cachedElement.ValueKind == JsonValueKind.False)
-                {
-                    continue;
-                }
-
                 var itemId = GetString(itemElement, "id");
                 var itemName = GetString(itemElement, "name");
                 if (string.IsNullOrWhiteSpace(itemId))
                 {
+                    throw new InvalidOperationException($"TorBox {torBoxType} list response contained an item without an id.");
+                }
+
+                var itemKey = TorBoxDeletionRecord.BuildKey(torBoxType, itemId);
+                observedItemKeys.Add(itemKey);
+                if (itemElement.TryGetProperty("cached", out var cachedElement)
+                    && cachedElement.ValueKind == JsonValueKind.False)
+                {
+                    unavailableItemKeys.Add(itemKey);
                     continue;
                 }
 
                 if (!itemElement.TryGetProperty("files", out var fileElements) || fileElements.ValueKind != JsonValueKind.Array)
                 {
-                    continue;
+                    throw new InvalidOperationException($"TorBox {torBoxType}:{itemId} did not contain a files array.");
                 }
 
                 foreach (var fileElement in fileElements.EnumerateArray())
@@ -102,7 +107,13 @@ public sealed class TorBoxClient
         }
 
         _logger.LogInformation("Fetched {Count} managed video files from TorBox {Type}", files.Count, torBoxType);
-        return files;
+        return new TorBoxSnapshot
+        {
+            TorBoxType = torBoxType,
+            Candidates = files,
+            ObservedItemKeys = observedItemKeys,
+            UnavailableItemKeys = unavailableItemKeys
+        };
     }
 
     public async Task DeleteDownloadAsync(

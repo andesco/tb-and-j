@@ -38,6 +38,8 @@ public sealed class ManagedFileRecord
 
     public DateTimeOffset? DeletedFromTorBoxAtUtc { get; set; }
 
+    public int ConsecutiveRemoteMisses { get; set; }
+
     public string Key => BuildKey(TorBoxType, TorBoxItemId, TorBoxFileId);
 
     public bool IsTombstoned => TombstonedAtUtc.HasValue;
