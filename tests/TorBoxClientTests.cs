@@ -9,6 +9,21 @@ namespace Jellyfin.Plugin.TorBoxSync.Tests;
 public sealed class TorBoxClientTests
 {
     [Fact]
+    public async Task DeleteDownloadAsync_UsesLowercaseDeleteOperationForTorrents()
+    {
+        var handler = new StubHttpMessageHandler("""{"success":true}""");
+        var client = new TorBoxClient(new StubHttpClientFactory(handler), NullLogger<TorBoxClient>.Instance);
+
+        await client.DeleteDownloadAsync(
+            "torrents",
+            "123",
+            new PluginConfiguration { TorBoxApiKey = "test-key" },
+            CancellationToken.None);
+
+        Assert.Contains("\"operation\":\"delete\"", handler.RequestBody);
+    }
+
+    [Fact]
     public async Task GetManagedVideoFilesAsync_RejectsResponseWithoutDataArray()
     {
         var client = CreateClient("""{"success":true}""");
@@ -57,12 +72,21 @@ public sealed class TorBoxClientTests
 
     private sealed class StubHttpMessageHandler(string responseBody) : HttpMessageHandler
     {
-        protected override Task<HttpResponseMessage> SendAsync(
+        public string RequestBody { get; private set; } = string.Empty;
+
+        protected override async Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request,
             CancellationToken cancellationToken)
-            => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            if (request.Content is not null)
+            {
+                RequestBody = await request.Content.ReadAsStringAsync(cancellationToken);
+            }
+
+            return new HttpResponseMessage(HttpStatusCode.OK)
             {
                 Content = new StringContent(responseBody, Encoding.UTF8, "application/json")
-            });
+            };
+        }
     }
 }

@@ -123,7 +123,7 @@ public sealed class TorBoxClient
     {
         var (endpoint, idField, operation) = torBoxType switch
         {
-            "torrents" => ("torrents/controltorrent", "torrent_id", "Delete"),
+            "torrents" => ("torrents/controltorrent", "torrent_id", "delete"),
             "usenet" => ("usenet/controlusenetdownload", "usenet_id", "delete"),
             "webdl" => ("webdl/controlwebdownload", "download_id", "delete"),
             _ => throw new InvalidOperationException($"Unsupported TorBox type '{torBoxType}'.")
